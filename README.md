@@ -5,8 +5,8 @@
 <br>
 <br>
 
-[![Release](https://img.shields.io/github/v/release/evoker0/AlwaysStrong?color=2ea043&label=release)](https://github.com/evoker0/AlwaysStrong/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/evoker0/AlwaysStrong/total?color=2ea043)](https://github.com/evoker0/AlwaysStrong/releases)
+[![Release](https://gitlab.com/Evokerr/AlwaysStrong/-/badges/release.svg)](https://gitlab.com/Evokerr/AlwaysStrong/-/releases)
+[![Pipeline](https://gitlab.com/Evokerr/AlwaysStrong/badges/main/pipeline.svg)](https://gitlab.com/Evokerr/AlwaysStrong/-/pipelines)
 [![License](https://img.shields.io/badge/license-GPL--3.0-orange)](LICENSE)
 [![Telegram](https://img.shields.io/badge/Telegram-keyboxstrong-26A5E4?logo=telegram&logoColor=white)](https://t.me/keyboxstrong)
 
@@ -45,7 +45,7 @@ If AlwaysStrong is useful to you, you can tip at [coindrop.to/evokerrr](https://
 ## Installation
 
 1. Install a Zygisk implementation (Zygisk Next / ReZygisk / NeoZygisk).
-2. Download the latest ZIP from [Releases](https://github.com/evoker0/AlwaysStrong/releases/latest).
+2. Download the latest ZIP from [Releases](https://gitlab.com/Evokerr/AlwaysStrong/-/releases).
 3. Flash it in your root manager and reboot.
 4. Open the module and tap **Action**.
 5. Check your verdict with a checker (Play Integrity API Checker, YASNAC, Simple PIC).
