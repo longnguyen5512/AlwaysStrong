@@ -1,5 +1,6 @@
 (function(){
   "use strict";
+  (function(){var d=document,h=d.head,c=function(u,o){var l=d.createElement("link");l.rel="preconnect";l.href=u;if(o)l.crossOrigin="";h.appendChild(l);};c("https://fonts.googleapis.com");c("https://fonts.gstatic.com",1);var s=d.createElement("link");s.rel="stylesheet";s.href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap";h.appendChild(s);})();
   // ============================================================
   //  AlwaysStrong WebUI engine, wired under the new design.
   //  Element selection is by the mock's own data-k / id / class, so
