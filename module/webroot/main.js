@@ -1,6 +1,5 @@
 (function(){
   "use strict";
-  (function(){var d=document,h=d.head,c=function(u,o){var l=d.createElement("link");l.rel="preconnect";l.href=u;if(o)l.crossOrigin="";h.appendChild(l);};c("https://fonts.googleapis.com");c("https://fonts.gstatic.com",1);var s=d.createElement("link");s.rel="stylesheet";s.href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap";h.appendChild(s);})();
   // ============================================================
   //  AlwaysStrong WebUI engine, wired under the new design.
   //  Element selection is by the mock's own data-k / id / class, so
@@ -555,7 +554,7 @@
   function fmtDate(t){ if(!t) return ""; try{ return new Date(t*1000).toISOString().slice(0,10); }catch(e){ return ""; } }
   function fmCrumb(){ var parts=fmPath.split("/").filter(Boolean),acc=""; var segs=parts.map(function(seg){ acc+="/"+seg; return '<span class="fmseg" data-p="'+esc(acc)+'" style="cursor:pointer">'+esc(seg)+'</span>'; }); fmPathEl.innerHTML=segs.length?segs.join(' <span style="opacity:.45">&rsaquo;</span> '):'<span class="fmseg" data-p="/">/</span>'; fmPathEl.scrollLeft=fmPathEl.scrollWidth; }
   function fetchDir(path){ return ksuExec("cd "+shq(path)+" 2>/dev/null && stat -c '%F\t%s\t%Y\t%n' * 2>/dev/null").then(function(r){ var items=[]; (r.stdout||"").split("\n").forEach(function(l){ if(!l) return; var p=l.split("\t"); if(p.length<4) return; var isDir=p[0]==="directory"; if(!isDir&&p[0].indexOf("regular")<0) return; items.push({dir:isDir,size:parseInt(p[1],10)||0,mtime:parseInt(p[2],10)||0,name:p.slice(3).join("\t")}); }); return items; }); }
-  function fmRender(items){ fmCrumb(); var dirs=items.filter(function(i){ return i.dir; }).sort(fmCmp); var files=items.filter(function(i){ return !i.dir && (!fmXml || fmMatchExt(i.name)); }).sort(fmCmp); var html=""; dirs.concat(files).forEach(function(it){ var sub=it.dir?fmtDate(it.mtime):(fmtSize(it.size)+" · "+fmtDate(it.mtime)); html+='<div class="appitem" data-dir="'+(it.dir?1:0)+'" data-name="'+esc(it.name)+'"><span class="appav">'+(it.dir?DIR_SVG:FILE_SVG)+'</span><span class="an"><span class="n">'+esc(it.name)+'</span><span class="p">'+esc(sub)+'</span></span></div>'; }); if(!dirs.length&&!files.length) html='<div class="empty" style="display:block">'+esc(tr("fm_empty","Empty folder"))+'</div>'; fmList.innerHTML='<div class="card">'+html+'</div>'; fmList.scrollTop=0; }
+  function fmRender(items){ fmCrumb(); var dirs=items.filter(function(i){ return i.dir; }).sort(fmCmp); var files=items.filter(function(i){ return !i.dir && (!fmXml || fmMatchExt(i.name)); }).sort(fmCmp); var html=""; if(fmPath!=="/") html+='<div class="appitem" data-dir="1" data-name=".."><span class="appav">'+DIR_SVG+'</span><span class="an"><span class="n">..</span><span class="p">'+esc(tr("fm_parent","Parent folder"))+'</span></span></div>'; dirs.concat(files).forEach(function(it){ var sub=it.dir?fmtDate(it.mtime):(fmtSize(it.size)+" · "+fmtDate(it.mtime)); html+='<div class="appitem" data-dir="'+(it.dir?1:0)+'" data-name="'+esc(it.name)+'"><span class="appav">'+(it.dir?DIR_SVG:FILE_SVG)+'</span><span class="an"><span class="n">'+esc(it.name)+'</span><span class="p">'+esc(sub)+'</span></span></div>'; }); if(!dirs.length&&!files.length) html='<div class="empty" style="display:block">'+esc(tr("fm_empty","Empty folder"))+'</div>'; fmList.innerHTML='<div class="card">'+html+'</div>'; fmList.scrollTop=0; }
   // remember the folder across reboots (debounced; detached root write)
   var _fmPathT=null;
   function fmSavePath(){ if(_fmPathT) clearTimeout(_fmPathT); _fmPathT=setTimeout(function(){ fmSaved=fmPath; deferBg("sh "+shq(STORE)+" state-set fm_path "+shq(fmPath)); },300); }
@@ -593,7 +592,7 @@
   document.getElementById("fmClose").addEventListener("click",function(){ closeM(fmModal); });
   fmModal.addEventListener("click",function(e){ if(e.target===fmModal) closeM(fmModal); });
   fmPathEl.addEventListener("click",function(e){ var s=e.target.closest(".fmseg"); if(s&&s.getAttribute("data-p")!==fmPath){ fmPath=s.getAttribute("data-p"); fmNav(); } });
-  fmList.addEventListener("click",function(e){ var it=e.target.closest(".appitem"); if(!it) return; var name=it.getAttribute("data-name"); var np=(fmPath==="/"?"":fmPath)+"/"+name; if(it.getAttribute("data-dir")==="1"){ fmPath=np; fmNav(); } else fmChoose(np,name); });
+  fmList.addEventListener("click",function(e){ var it=e.target.closest(".appitem"); if(!it) return; var name=it.getAttribute("data-name"); if(name===".."){ fmBack(); return; } var np=(fmPath==="/"?"":fmPath)+"/"+name; if(it.getAttribute("data-dir")==="1"){ fmPath=np; fmNav(); } else fmChoose(np,name); });
   function fmChoose(path,name){
     if(fmMode==="pif"){
       ksuExec("head -c 256 "+shq(path)+" 2>/dev/null | tr -d ' \\t\\r\\n' | cut -c1").then(function(a){ var first=(a.stdout||"").trim();

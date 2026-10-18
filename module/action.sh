@@ -139,6 +139,16 @@ echo "  $LINE"
 row "🔒" "AlwaysStrong  ${VER}"
 echo "  $LINE"
 echo ""
+
+_au=$(sed -n 's/^author=//p' "$MODPATH/module.prop" 2>/dev/null)
+case "$_au" in *[Ee]vokerr*) ;; *)
+  row "⚠️" "UNOFFICIAL BUILD"
+  row "⚠️" "Original author removed."
+  row "⚠️" "Official: gitlab.com/Evokerr/AlwaysStrong"
+  row "⚠️" "          t.me/keyboxstrong"
+  echo ""
+;; esac
+
 row "⏳" "initializing..."
 sleep 3
 

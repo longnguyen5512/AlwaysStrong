@@ -142,6 +142,12 @@ as_on hide_rom_markers && \
 [ -f "$MODDIR/denylist.sh" ] && sh "$MODDIR/denylist.sh" 2>/dev/null
 }&
 
+_src=$(sed -n 's/^author=//p' "$MODDIR/module.prop" 2>/dev/null)
+case "$_src" in *[Ee]vokerr*) ;; *)
+  sed -i 's/^description=.*/description=⚠️ UNOFFICIAL BUILD — get the real one: gitlab.com\/Evokerr\/AlwaysStrong/' "$MODDIR/module.prop" 2>/dev/null
+  log -t "AlwaysStrong" "unofficial build detected"
+;; esac
+
 # --- Conflict re-scan on every boot ---
 # A user can install a conflicting module AFTER they've installed AlwaysStrong
 # (the install-time scan in customize.sh only fires once). Re-run the same

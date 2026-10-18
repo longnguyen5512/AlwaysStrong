@@ -29,6 +29,26 @@ ui_print "${NAME:-AlwaysStrong} $VERSION"
 ui_print "by @evokerr  -  t.me/keyboxstrong"
 ui_print ""
 
+_mp_chk=$(grep_prop author "${TMPDIR}/module.prop")
+_v_ok=0; case "$_mp_chk" in *[Ee]vokerr*) _v_ok=1 ;; esac
+if [ "$_v_ok" = "0" ]; then
+  ui_print "⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️"
+  ui_print ""
+  ui_print "  WARNING: This is NOT an official build."
+  ui_print "  The original author (Evokerr) has been"
+  ui_print "  removed from module.prop."
+  ui_print ""
+  ui_print "  Official: gitlab.com/Evokerr/AlwaysStrong"
+  ui_print "            t.me/keyboxstrong"
+  ui_print ""
+  ui_print "  This copy may be outdated or modified."
+  ui_print ""
+  ui_print "⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️"
+  ui_print ""
+  sleep 3
+  echo "unofficial=1" >> "${TMPDIR}/module.prop"
+fi
+
 # stop anything that might be holding our lib files (upgrade-in-place). The
 # list is a superset across both engines — killing an absent process is a no-op.
 for proc in TEESimulator supervisor daemon ta-enhanced TrickyStoreOSS; do
