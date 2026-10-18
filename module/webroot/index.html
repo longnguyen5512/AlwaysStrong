@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>AlwaysStrong</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+<script>
+(function(){var d=document,h=d.head,c=function(u,o){var l=d.createElement("link");l.rel="preconnect";l.href=u;if(o)l.crossOrigin="";h.appendChild(l);};c("https://fonts.googleapis.com");c("https://fonts.gstatic.com",1);var s=d.createElement("link");s.rel="stylesheet";s.href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap";h.appendChild(s);})();
+</script>
 <style>
 /* New design, refined (smaller, compact proportions): a collapsing
    title, a search pill, colour tiles, airy grouped cards, a bottom bar, a
@@ -583,12 +583,10 @@ section[hidden]{display:none}
 </div>
 
 <script>
+try{ var _app=document.querySelector(".app"); if(_app) requestAnimationFrame(function(){ _app.classList.add("ready"); }); }catch(e){}
+setTimeout(function(){
 (function(){
   "use strict";
-  // reveal + play the entrance animation after the first paint, so the content
-  // is shown immediately rather than waiting behind an animation that the KSU
-  // webview may never run while it is still rendering hidden.
-  try{ var _app=document.querySelector(".app"); if(_app) requestAnimationFrame(function(){ _app.classList.add("ready"); }); }catch(e){}
   // ============================================================
   //  AlwaysStrong WebUI engine, wired under the new design.
   //  Element selection is by the mock's own data-k / id / class, so
@@ -1337,6 +1335,7 @@ section[hidden]{display:none}
   });
   fetchMetaName().then(function(n){ if(n){ metaKeyName=n; applyMetaName(); } });
 })();
+},0);
 </script>
 </body>
 </html>
