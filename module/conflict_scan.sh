@@ -35,6 +35,7 @@ TrickyStore
 tee_simulator
 TEESimulator
 TEESimulator-RS
+teesim
 safetynet-fix
 Universal_SafetyNet_Fix
 MagiskHidePropsConf

@@ -1,8 +1,7 @@
 #!/system/bin/sh
 # Block ROM-level Play Integrity spoof engines.
 #
-# Adapted from dpejoh/specter (block_rom_spoof_engines in src/lib/common.sh).
-# Custom ROMs (LineageOS, EvolutionX, PixelOS, …) ship their own pixel-prop /
+# Custom ROMs (LineageOS, EvolutionX, PixelOS, ...) ship their own pixel-prop /
 # pihook / entryhook spoofers that fight ours: they re-set Build.* every boot,
 # corrupt the attestation chain, and on STRONG checks the leaked extra hooks
 # get flagged. We disable the ROM engines so AlwaysStrong is the single

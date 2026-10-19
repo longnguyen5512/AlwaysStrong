@@ -3,10 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="color-scheme" content="dark light">
 <title>AlwaysStrong</title>
-<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="color-scheme" content="dark light">
+<script>try{var t=localStorage.getItem("theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <style>
+/* New design, refined (smaller, compact proportions): a collapsing
+   title, a search pill, colour tiles, airy grouped cards, a bottom bar, a
+   Target-apps screen with a 3-dot menu that holds Security patch. No color-mix. */
 :root{
   --bg:#f2f3f5; --card:#fff; --field:#eceef2; --press:#00000008;
   --ink:#141518; --sub:#777c85; --faint:#aab0b9; --line:#ebedf0;
@@ -64,6 +67,9 @@ input{-webkit-user-select:text;user-select:text}
 
 .scroll{padding:6px 16px 120px}
 section[hidden]{display:none}
+/* Entrance animation is opt-in via .ready so content is NEVER held invisible:
+   if the webview first renders hidden (the KSU host does this), the groups stay
+   at their resting opacity:1 instead of a stuck opacity:0 "grey screen". */
 .grp{animation:rise .36s cubic-bezier(.22,.68,.26,1)}
 .app:not(.ready) .grp{animation:none}
 .grp[hidden]{display:none}
@@ -108,6 +114,7 @@ section[hidden]{display:none}
 .rowdel:active{background:var(--press);color:var(--danger)}.rowdel svg{width:19px;height:19px}
 .rowdel[hidden]{display:none}
 .row.off{opacity:.5}.row.off .sl{cursor:default}
+/* custom keybox picker: slide/fade open instead of popping in */
 #ckPick{overflow:hidden;min-height:0;max-height:0;opacity:0;padding-top:0;padding-bottom:0;transition:max-height .34s ease,opacity .3s ease,padding .34s ease}
 #ckPick.reveal{max-height:76px;opacity:1;padding-top:12px;padding-bottom:12px}
 
@@ -136,9 +143,13 @@ section[hidden]{display:none}
 .badge{font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:3px 8px;border-radius:999px;background:var(--good-soft);color:var(--good)}
 .beta .ck{color:var(--accent);opacity:0;transition:opacity .15s;display:grid;place-items:center}.beta .ck svg{width:20px;height:20px}
 .beta.sel .ck{opacity:1}.beta.sel .m{color:var(--accent)}
+.beta-loading{display:flex;align-items:center;justify-content:center;gap:10px;padding:24px 18px;color:var(--sub);font-size:13px}
+.beta-loading .spin{width:18px;height:18px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:bspin .7s linear infinite}
+@keyframes bspin{to{transform:rotate(360deg)}}
 .rot{transition:transform .32s cubic-bezier(.3,.7,.3,1)}.open .rot{transform:rotate(180deg)}
 .note{font-size:12px;color:var(--sub);padding:3px 20px 14px;line-height:1.45}
 
+/* community / support, restrained rows with the channel's own logo */
 .linkrow{text-decoration:none;color:inherit}
 .logo{width:34px;height:34px;border-radius:11px;overflow:hidden;flex-shrink:0;background:var(--field);box-shadow:0 1px 3px rgba(16,18,22,.14)}
 .logo img{width:100%;height:100%;object-fit:cover;display:block}
@@ -157,6 +168,7 @@ section[hidden]{display:none}
 .toast.show{opacity:1;transform:translateX(-50%)}
 .empty{text-align:center;color:var(--sub);font-size:14px;font-weight:500;padding:40px 20px;display:none}
 
+/* ---- popup dialogs (Target apps + Security patch), centred ---- */
 .modal{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:20px;
   padding-top:max(20px,env(safe-area-inset-top,0px));padding-bottom:max(20px,env(safe-area-inset-bottom,0px));
   background:rgba(0,0,0,.42);opacity:0;pointer-events:none;transition:opacity .2s}
@@ -199,6 +211,8 @@ section[hidden]{display:none}
 .inp:focus{outline:0;border-color:var(--accent);background:var(--card)}
 
 @media (max-width:380px){.hero h1{font-size:26px}.inp{width:120px}}
+/* tablets / large screens: widen the column and scale up so it is not a tiny
+   strip of UI in the middle of a big display */
 @media (min-width:700px){
   .app{max-width:640px}
   .nav{max-width:640px}
@@ -226,6 +240,8 @@ section[hidden]{display:none}
   .app,.nav{max-width:720px}
   .hero h1{font-size:40px}
 }
+/* desktop / Surface: frame the app column so it reads as an app, not a lost
+   strip. Page behind gets a neutral fill; the column keeps the app background. */
 @media (min-width:820px){
   body{background:#d2d5db}
   .app{background:var(--bg);box-shadow:0 0 0 1px var(--line),0 24px 70px rgba(16,18,22,.22)}
@@ -234,6 +250,7 @@ section[hidden]{display:none}
   :root:not([data-theme="light"]) body{background:#0b0b0c}
 }
 @media (min-width:820px){ :root[data-theme="dark"] body{background:#0b0b0c} }
+.fmsc{display:inline-flex;align-items:center;padding:6px 14px;border-radius:18px;border:1px solid var(--line);background:var(--card);font-size:12.5px;font-weight:600;color:var(--text);cursor:pointer;white-space:nowrap;flex-shrink:0}.fmsc:active{background:var(--press)}
 </style>
 </head>
 <body>
@@ -241,7 +258,7 @@ section[hidden]{display:none}
   <div class="bar" id="bar">
     <div class="t">AlwaysStrong</div>
     <button class="ib" id="langBtn" aria-label="Language"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18"/></svg></button>
-    <button class="ib" id="themeBtn" aria-label="Theme"><svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></button>
+    <button class="ib" id="themeBtn" aria-label="Theme"><svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></svg></button>
   </div>
 
   <div class="hero">
@@ -254,7 +271,7 @@ section[hidden]{display:none}
     <section id="pgMain">
       <div class="grp"><div class="card statusbar">
         <span class="sk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 20 3"/><path d="m17 6 2 2"/><path d="m14.5 8.5 2 2"/></svg></span>
-        <span class="lab"><span data-i="status">Keybox status</span><small>evokerrkey</small></span>
+        <span class="lab"><span data-i="status">Keybox status</span><small>evokerrkey36</small></span>
         <span class="sp"></span>
         <span class="checks" title="Basic · Device · Strong, all pass"><svg class="vico pass" viewBox="0 0 48 48" fill="currentColor"><path fill-rule="evenodd" d="M21.05,33.1 L35.2,18.95l-2.3,-2.25 -11.85,11.85 -6,-6 -2.25,2.25ZM24,44q-4.1,0 -7.75,-1.575 -3.65,-1.575 -6.375,-4.3 -2.725,-2.725 -4.3,-6.375Q4,28.1 4,24q0,-4.15 1.575,-7.8 1.575,-3.65 4.3,-6.35 2.725,-2.7 6.375,-4.275Q19.9,4 24,4q4.15,0 7.8,1.575 3.65,1.575 6.35,4.275 2.7,2.7 4.275,6.35Q44,19.85 44,24q0,4.1 -1.575,7.75 -1.575,3.65 -4.275,6.375t-6.35,4.3Q28.15,44 24,44Z"/></svg><svg class="vico pass" viewBox="0 0 48 48" fill="currentColor"><path fill-rule="evenodd" d="M21.05,33.1 L35.2,18.95l-2.3,-2.25 -11.85,11.85 -6,-6 -2.25,2.25ZM24,44q-4.1,0 -7.75,-1.575 -3.65,-1.575 -6.375,-4.3 -2.725,-2.725 -4.3,-6.375Q4,28.1 4,24q0,-4.15 1.575,-7.8 1.575,-3.65 4.3,-6.35 2.725,-2.7 6.375,-4.275Q19.9,4 24,4q4.15,0 7.8,1.575 3.65,1.575 6.35,4.275 2.7,2.7 4.275,6.35Q44,19.85 44,24q0,4.1 -1.575,7.75 -1.575,3.65 -4.275,6.375t-6.35,4.3Q28.15,44 24,44Z"/></svg><svg class="vico pass" viewBox="0 0 48 48" fill="currentColor"><path fill-rule="evenodd" d="M21.05,33.1 L35.2,18.95l-2.3,-2.25 -11.85,11.85 -6,-6 -2.25,2.25ZM24,44q-4.1,0 -7.75,-1.575 -3.65,-1.575 -6.375,-4.3 -2.725,-2.725 -4.3,-6.375Q4,28.1 4,24q0,-4.15 1.575,-7.8 1.575,-3.65 4.3,-6.35 2.725,-2.7 6.375,-4.275Q19.9,4 24,4q4.15,0 7.8,1.575 3.65,1.575 6.35,4.275 2.7,2.7 4.275,6.35Q44,19.85 44,24q0,4.1 -1.575,7.75 -1.575,3.65 -4.275,6.375t-6.35,4.3Q28.15,44 24,44Z"/></svg></span>
       </div></div>
@@ -267,7 +284,7 @@ section[hidden]{display:none}
         </div>
         <div class="row" data-k="keybox auto check">
           <div class="ic teal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 20 3"/><path d="m17 6 2 2"/><path d="m14.5 8.5 2 2"/></svg></div>
-          <div class="txt"><div class="h" data-i="kb_t">Keybox</div><div class="s">Auto check · evokerrkey.xml</div></div>
+          <div class="txt"><div class="h" data-i="kb_t">Keybox</div><div class="s">Auto check · evokerrkey36.xml</div></div>
           <label class="sw"><input type="checkbox" checked><span class="sl"></span></label>
         </div>
         <div class="row" data-k="status indicator prefix">
@@ -345,13 +362,7 @@ section[hidden]{display:none}
           <div class="txt"><div class="h" data-i="beta_t">Beta fingerprints</div><div class="s" data-i="beta_s">Only Pixel 6a (bluejay) passes STRONG</div></div>
           <span class="chev rot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
         </div>
-        <div class="acc" id="betaAcc">
-          <div class="beta sel" data-c="bluejay"><div class="bn"><div class="m">Pixel 6a</div><div class="c">bluejay · Android 12</div></div><span class="badge">STRONG</span><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></span></div>
-          <div class="beta" data-c="oriole"><div class="bn"><div class="m">Pixel 6</div><div class="c">oriole · Android 12</div></div><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></span></div>
-          <div class="beta" data-c="raven"><div class="bn"><div class="m">Pixel 6 Pro</div><div class="c">raven · Android 12</div></div><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></span></div>
-          <div class="beta" data-c="husky"><div class="bn"><div class="m">Pixel 8 Pro</div><div class="c">husky · Android 14</div></div><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></span></div>
-          <div class="beta" data-c="komodo"><div class="bn"><div class="m">Pixel 9 Pro XL</div><div class="c">komodo · Android 14</div></div><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></span></div>
-        </div>
+        <div class="acc" id="betaAcc"></div>
       </div></div>
 
       <div class="grp" id="spoofGrp"><div class="lbl" data-i="spoofvars">Spoof variables</div><div class="card" id="spoofCard">
@@ -559,6 +570,7 @@ section[hidden]{display:none}
       </div>
       <div class="dbody">
         <div id="fmPath" style="font-size:12px;color:var(--sub);font-weight:600;margin:2px 2px 10px;white-space:nowrap;overflow-x:auto"></div>
+        <div id="fmShort" style="display:none;margin:0 2px 10px;overflow-x:auto;white-space:nowrap;gap:6px"></div>
         <div class="applist" id="fmList"></div>
       </div>
     </div>
@@ -567,7 +579,6 @@ section[hidden]{display:none}
   <div class="toast" id="toast"></div>
 </div>
 
-<script>try{ var _app=document.querySelector(".app"); if(_app) requestAnimationFrame(function(){ _app.classList.add("ready"); }); }catch(e){}</script>
 <script defer src="main.js"></script>
 </body>
 </html>

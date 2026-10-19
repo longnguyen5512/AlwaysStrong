@@ -1,5 +1,9 @@
 (function(){
   "use strict";
+  // reveal + play the entrance animation after the first paint, so the content
+  // is shown immediately rather than waiting behind an animation that the KSU
+  // webview may never run while it is still rendering hidden.
+  try{ var _app=document.querySelector(".app"); if(_app) requestAnimationFrame(function(){ _app.classList.add("ready"); }); }catch(e){}
   // ============================================================
   //  AlwaysStrong WebUI engine, wired under the new design.
   //  Element selection is by the mock's own data-k / id / class, so
@@ -31,6 +35,24 @@
   function ksuBg(cmd){ return ksuExec("({ "+cmd+" ; } >/dev/null 2>&1 &) ; echo ok"); }
   function deferBg(cmd){ setTimeout(function(){ ksuBg(cmd); },0); }
 
+  // ---- fire readAll shell NOW so it runs while JS below sets up event listeners ----
+  var __earlyReadCmd=[
+    'echo "ver=$(grep -m1 \'^version=\' "'+MOD+'/module.prop" 2>/dev/null | cut -d= -f2-)"',
+    'echo "eng=$(grep -m1 \'^ENGINE=\' "'+MOD+'/engine.sh" 2>/dev/null | cut -d= -f2-)"',
+    'echo "att=$(grep -m1 \'^ATTEST=\' "'+MOD+'/attest.sh" 2>/dev/null | cut -d= -f2-)"',
+    'echo "desc=$(grep -m1 \'^description=\' "'+MOD+'/module.prop" 2>/dev/null | sed -e \'s/^description=//\' | awk \'{print $1}\')"',
+    'cat "'+AS_CONF+'" 2>/dev/null',
+    '[ -s "'+KEYBOX+'" ] && echo "kb=$(wc -c < "'+KEYBOX+'")|$(stat -c %Y "'+KEYBOX+'" 2>/dev/null)" || echo "kb=0|"',
+    'echo "keybox_name=$(sed -n \'s/^keybox_name=//p\' "'+AS+'/state" 2>/dev/null | head -1)"',
+    'echo "pif_name=$(sed -n \'s/^pif_name=//p\' "'+AS+'/state" 2>/dev/null | head -1)"',
+    'echo "pif_model=$(sed -n \'s/^pif_model=//p\' "'+AS+'/state" 2>/dev/null | head -1)"',
+    'echo "fm_path=$(sed -n \'s/^fm_path=//p\' "'+AS+'/state" 2>/dev/null | head -1)"',
+    'echo "model=$(for f in "'+MOD+'/custom.pif.prop" "'+MOD+'/pif.prop" "'+CFG+'/custom.pif.prop" "'+CFG+'/pif.prop"; do [ -s "$f" ] && { v=$(grep -m1 \'^MODEL=\' "$f" | cut -d= -f2- | tr -d \'"\r\'); [ -n "$v" ] && { echo "$v"; break; }; }; done)"',
+    'echo "--spoof--"',
+    'for f in "'+MOD+'/custom.pif.prop" "'+CFG+'/custom.pif.prop" "'+MOD+'/pif.prop" "'+CFG+'/pif.prop"; do [ -s "$f" ] && grep -qiE \'^(spoof|DEBUG)\' "$f" && { grep -iE \'^(spoof|DEBUG)\' "$f"; break; }; done'
+  ].join("; ");
+  var __earlyReadP=ksuExec(__earlyReadCmd);
+
   // ---- debounced config writes (one shell for a burst of toggles) ----
   var _pend={}, _timer=null;
   function flush(){ _timer=null; var parts=[],k; for(k in _pend) parts.push("sh "+shq(STORE)+" set "+shq(k)+" "+shq(_pend[k])); for(k in _pend) delete _pend[k]; if(parts.length) ksuBg(parts.join("; ")); }
@@ -52,32 +74,19 @@
   function openExternal(url){ var safe=String(url).replace(/'/g,"'\\''"); if(typeof ksu!=="undefined"&&ksu.exec){ ksuExec("am start -a android.intent.action.VIEW -d '"+safe+"' >/dev/null 2>&1"); return true; } return false; }
   qa("a.linkrow").forEach(function(a){ a.addEventListener("click",function(e){ if(openExternal(a.href)) e.preventDefault(); }); });
 
-  // ---- one shell for the whole first paint ----
-  function readAll(){
-    var cmd=[
-      'echo "ver=$(grep -m1 \'^version=\' "'+MOD+'/module.prop" 2>/dev/null | cut -d= -f2-)"',
-      'echo "eng=$(grep -m1 \'^ENGINE=\' "'+MOD+'/engine.sh" 2>/dev/null | cut -d= -f2-)"',
-      'echo "att=$(grep -m1 \'^ATTEST=\' "'+MOD+'/attest.sh" 2>/dev/null | cut -d= -f2-)"',
-      'echo "desc=$(grep -m1 \'^description=\' "'+MOD+'/module.prop" 2>/dev/null | sed -e \'s/^description=//\' | awk \'{print $1}\')"',
-      'cat "'+AS_CONF+'" 2>/dev/null',
-      '[ -s "'+KEYBOX+'" ] && echo "kb=$(wc -c < "'+KEYBOX+'")|$(stat -c %Y "'+KEYBOX+'" 2>/dev/null)" || echo "kb=0|"',
-      'echo "keybox_name=$(sed -n \'s/^keybox_name=//p\' "'+AS+'/state" 2>/dev/null | head -1)"',
-      'echo "pif_name=$(sed -n \'s/^pif_name=//p\' "'+AS+'/state" 2>/dev/null | head -1)"',
-      'echo "pif_model=$(sed -n \'s/^pif_model=//p\' "'+AS+'/state" 2>/dev/null | head -1)"',
-      'echo "fm_path=$(sed -n \'s/^fm_path=//p\' "'+AS+'/state" 2>/dev/null | head -1)"',
-      'echo "model=$(for f in "'+MOD+'/custom.pif.prop" "'+MOD+'/pif.prop" "'+CFG+'/custom.pif.prop" "'+CFG+'/pif.prop"; do [ -s "$f" ] && { v=$(grep -m1 \'^MODEL=\' "$f" | cut -d= -f2- | tr -d \'"\r\'); [ -n "$v" ] && { echo "$v"; break; }; }; done)"',
-      'echo "--spoof--"',
-      'for f in "'+MOD+'/custom.pif.prop" "'+CFG+'/custom.pif.prop" "'+MOD+'/pif.prop" "'+CFG+'/pif.prop"; do [ -s "$f" ] && grep -qiE \'^(spoof|DEBUG)\' "$f" && { grep -iE \'^(spoof|DEBUG)\' "$f"; break; }; done'
-    ].join("; ");
-    return ksuExec(cmd).then(function(r){
-      var o={spoof:[]}, inSpoof=false;
-      (r.stdout||"").split("\n").forEach(function(l){
-        if(l.trim()==="--spoof--"){ inSpoof=true; return; }
-        if(inSpoof){ if(l.trim()) o.spoof.push(l); return; }
-        var i=l.indexOf("="); if(i>0) o[l.slice(0,i).trim()]=l.slice(i+1).trim();
-      });
-      return o;
+  // ---- one shell for the whole first paint (fired early, see __earlyReadP) ----
+  function parseReadAll(r){
+    var o={spoof:[]}, inSpoof=false;
+    (r.stdout||"").split("\n").forEach(function(l){
+      if(l.trim()==="--spoof--"){ inSpoof=true; return; }
+      if(inSpoof){ if(l.trim()) o.spoof.push(l); return; }
+      var i=l.indexOf("="); if(i>0) o[l.slice(0,i).trim()]=l.slice(i+1).trim();
     });
+    return o;
+  }
+  function readAll(fresh){
+    if(fresh) __earlyReadP=ksuExec(__earlyReadCmd);
+    return __earlyReadP.then(parseReadAll);
   }
 
   // ---- auto keybox name from the server mirror (/meta.json), like v1.0.4 ----
@@ -362,8 +371,7 @@
   // first open, so new devices appear automatically; it falls back to the full
   // known set when offline. Picking one imports it as a custom pif.
   var BETA_MODELS={akita:"Pixel 8a",blazer:"Pixel 10 Pro",bluejay:"Pixel 6a",caiman:"Pixel 9 Pro",cheetah:"Pixel 7 Pro",comet:"Pixel 9 Pro Fold",felix:"Pixel Fold",frankel:"Pixel 10",husky:"Pixel 8 Pro",komodo:"Pixel 9 Pro XL",lynx:"Pixel 7a",mustang:"Pixel 10 Pro XL",oriole:"Pixel 6",panther:"Pixel 7",rango:"Pixel 10 Pro Fold",raven:"Pixel 6 Pro",shiba:"Pixel 8",stallion:"Pixel 10a",tangorpro:"Pixel Tablet",tegu:"Pixel 9a",tokay:"Pixel 9"};
-  // Only Android 12-launch Pixels (the 6 series) still reach STRONG via keybox attestation.
-  var BETA_STRONG={bluejay:1,oriole:1,raven:1};
+  var BETA_STRONG={bluejay:1};
   var betaHead=document.getElementById("betaHead"),betaAcc=document.getElementById("betaAcc");
   var betaBusy=false, betaLoaded=false;
   function betaCurCode(){ var pn=(__lastS&&__lastS.pif_name)||""; var m=pn.match(/^([A-Za-z0-9_]+)\.pif\.prop$/); return m?m[1]:""; }
@@ -371,13 +379,24 @@
     return '<div class="beta'+(sel?" sel":"")+'" data-c="'+esc(code)+'"><div class="bn"><div class="m">'+esc(m)+'</div><div class="c">'+esc(code)+'</div></div>'+(BETA_STRONG[code]?'<span class="badge">STRONG</span>':'')+'<span class="ck">'+CHK2+'</span></div>'; }
   function betaRender(codes){ if(!betaAcc) return; betaAcc.innerHTML=codes.map(betaRow).join("");
     if(betaHead&&betaHead.classList.contains("open")) betaAcc.style.maxHeight=betaAcc.scrollHeight+"px"; }
-  function betaLoad(){ if(betaLoaded) return; betaLoaded=true;
-    ksuExec("sh "+shq(MOD+"/beta_pif.sh")+" list").then(function(r){
+  var betaLiveCodes=null, betaFetchP=null;
+  function betaFetch(){
+    if(betaFetchP) return betaFetchP;
+    betaFetchP=ksuExec("sh "+shq(MOD+"/beta_pif.sh")+" list").then(function(r){
       var codes=(r.stdout||"").split("\n").map(function(s){ return s.trim(); }).filter(function(c){ return /^[A-Za-z0-9_]+$/.test(c); });
-      if(!codes.length){ betaLoaded=false; codes=Object.keys(BETA_MODELS); }
-      else codes.sort(function(a,b){ return (BETA_MODELS[a]||a).localeCompare(BETA_MODELS[b]||b); });
-      betaRender(codes);
-    }); }
+      if(codes.length) codes.sort(function(a,b){ return (BETA_MODELS[a]||a).localeCompare(BETA_MODELS[b]||b); });
+      else codes=Object.keys(BETA_MODELS).sort(function(a,b){ return (BETA_MODELS[a]||a).localeCompare(BETA_MODELS[b]||b); });
+      betaLiveCodes=codes; return codes;
+    });
+    return betaFetchP;
+  }
+  function betaLoad(){ if(betaLoaded) return; betaLoaded=true;
+    if(betaLiveCodes){ betaRender(betaLiveCodes); return; }
+    if(betaAcc) betaAcc.innerHTML='<div class="beta-loading"><div class="spin"></div><span data-i="beta_fetching">Fetching fingerprints...</span></div>';
+    if(betaHead&&betaHead.classList.contains("open")) betaAcc.style.maxHeight=betaAcc.scrollHeight+"px";
+    betaFetch().then(function(codes){ betaRender(codes); });
+  }
+  setTimeout(function(){ betaFetch(); },800);
   if(betaHead&&betaAcc){
     betaHead.addEventListener("click",function(){ var o=betaHead.classList.toggle("open"); if(o) betaLoad(); betaAcc.style.maxHeight=o?betaAcc.scrollHeight+"px":"0px"; });
     // delegated: the rows are rendered dynamically after the list fetch
@@ -554,7 +573,12 @@
   function fmtDate(t){ if(!t) return ""; try{ return new Date(t*1000).toISOString().slice(0,10); }catch(e){ return ""; } }
   function fmCrumb(){ var parts=fmPath.split("/").filter(Boolean),acc=""; var segs=parts.map(function(seg){ acc+="/"+seg; return '<span class="fmseg" data-p="'+esc(acc)+'" style="cursor:pointer">'+esc(seg)+'</span>'; }); fmPathEl.innerHTML=segs.length?segs.join(' <span style="opacity:.45">&rsaquo;</span> '):'<span class="fmseg" data-p="/">/</span>'; fmPathEl.scrollLeft=fmPathEl.scrollWidth; }
   function fetchDir(path){ return ksuExec("cd "+shq(path)+" 2>/dev/null && stat -c '%F\t%s\t%Y\t%n' * 2>/dev/null").then(function(r){ var items=[]; (r.stdout||"").split("\n").forEach(function(l){ if(!l) return; var p=l.split("\t"); if(p.length<4) return; var isDir=p[0]==="directory"; if(!isDir&&p[0].indexOf("regular")<0) return; items.push({dir:isDir,size:parseInt(p[1],10)||0,mtime:parseInt(p[2],10)||0,name:p.slice(3).join("\t")}); }); return items; }); }
-  function fmRender(items){ fmCrumb(); var dirs=items.filter(function(i){ return i.dir; }).sort(fmCmp); var files=items.filter(function(i){ return !i.dir && (!fmXml || fmMatchExt(i.name)); }).sort(fmCmp); var html=""; if(fmPath!=="/") html+='<div class="appitem" data-dir="1" data-name=".."><span class="appav">'+DIR_SVG+'</span><span class="an"><span class="n">..</span><span class="p">'+esc(tr("fm_parent","Parent folder"))+'</span></span></div>'; dirs.concat(files).forEach(function(it){ var sub=it.dir?fmtDate(it.mtime):(fmtSize(it.size)+" · "+fmtDate(it.mtime)); html+='<div class="appitem" data-dir="'+(it.dir?1:0)+'" data-name="'+esc(it.name)+'"><span class="appav">'+(it.dir?DIR_SVG:FILE_SVG)+'</span><span class="an"><span class="n">'+esc(it.name)+'</span><span class="p">'+esc(sub)+'</span></span></div>'; }); if(!dirs.length&&!files.length) html='<div class="empty" style="display:block">'+esc(tr("fm_empty","Empty folder"))+'</div>'; fmList.innerHTML='<div class="card">'+html+'</div>'; fmList.scrollTop=0; }
+  var BACK_SVG='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>';
+  var fmShortEl=document.getElementById("fmShort");
+  var FM_SHORTS=[{l:"Internal storage",p:"/sdcard"},{l:"Download",p:"/sdcard/Download"}];
+  function fmShorts(){ var cur=fmPath; var sh=FM_SHORTS.filter(function(s){ return s.p!==cur; }); if(!sh.length){ fmShortEl.style.display="none"; return; } fmShortEl.style.display="flex"; fmShortEl.innerHTML=sh.map(function(s){ return '<button class="fmsc" data-fp="'+esc(s.p)+'">'+esc(s.l)+'</button>'; }).join(""); }
+  fmShortEl.addEventListener("click",function(e){ var b=e.target.closest(".fmsc"); if(!b) return; fmPath=b.getAttribute("data-fp"); fmNav(); });
+  function fmRender(items){ fmCrumb(); fmShorts(); var dirs=items.filter(function(i){ return i.dir; }).sort(fmCmp); var files=items.filter(function(i){ return !i.dir && (!fmXml || fmMatchExt(i.name)); }).sort(fmCmp); var html=""; if(fmPath!=="/") html+='<div class="appitem" data-dir="1" data-name=".."><span class="appav">'+BACK_SVG+'</span><span class="an"><span class="n">..</span></span></div>'; dirs.concat(files).forEach(function(it){ var sub=it.dir?fmtDate(it.mtime):(fmtSize(it.size)+" · "+fmtDate(it.mtime)); html+='<div class="appitem" data-dir="'+(it.dir?1:0)+'" data-name="'+esc(it.name)+'"><span class="appav">'+(it.dir?DIR_SVG:FILE_SVG)+'</span><span class="an"><span class="n">'+esc(it.name)+'</span><span class="p">'+esc(sub)+'</span></span></div>'; }); if(!dirs.length&&!files.length&&fmPath==="/") html='<div class="empty" style="display:block">'+esc(tr("fm_empty","Empty folder"))+'</div>'; fmList.innerHTML='<div class="card">'+html+'</div>'; fmList.scrollTop=0; }
   // remember the folder across reboots (debounced; detached root write)
   var _fmPathT=null;
   function fmSavePath(){ if(_fmPathT) clearTimeout(_fmPathT); _fmPathT=setTimeout(function(){ fmSaved=fmPath; deferBg("sh "+shq(STORE)+" state-set fm_path "+shq(fmPath)); },300); }
@@ -675,6 +699,9 @@
   var SAVED_LANG=(function(){ try{ var s=localStorage.getItem("as_lang"); return (s&&AS_I[s])?s:""; }catch(e){ return ""; } })();
   var CUR_LANG=SAVED_LANG||i18nAuto();
   var __lastS=null; // last state object, so the language can switch live
+  var CACHE_KEY="lastState";
+  function loadCache(){ try{ var o=JSON.parse(localStorage.getItem(CACHE_KEY)||"null"); return (o&&typeof o==="object")?o:null; }catch(e){ return null; } }
+  function saveCache(S){ try{ localStorage.setItem(CACHE_KEY,JSON.stringify(S)); }catch(e){} }
   var SYS_LABEL={en:"System default",tr:"Sistem varsayılanı",ru:"Системный язык",es:"Predeterminado del sistema",pt:"Padrão do sistema",de:"Systemstandard",fr:"Langue du système",it:"Predefinito di sistema",id:"Default sistem",vi:"Mặc định hệ thống",ar:"لغة النظام",zh:"跟随系统",ja:"システムの既定",ko:"시스템 기본값",hi:"सिस्टम डिफ़ॉल्ट"};
   // translate a dynamic string built in JS (English stays the mock source)
   function tr(k,fb){ var t=AS_I[CUR_LANG]; return (CUR_LANG!=="en"&&t&&t[k])?t[k]:fb; }
@@ -729,8 +756,10 @@
   // ---- status refresh helper ----
   function refreshStatus(){ ksuExec('grep -m1 \'^description=\' "'+MOD+'/module.prop" 2>/dev/null | sed -e \'s/^description=//\' | awk \'{print $1}\'').then(function(r){ renderChecks((r.stdout||"").trim()); }); }
 
-  // ---- go ----
-  readAll().then(function(S){ __lastS=S;
+  // ---- go: paint from cache instantly, then reconcile with fresh data ----
+  var cached=loadCache();
+  if(cached){ __lastS=cached; try{ paint(cached); }catch(e){} }
+  readAll().then(function(S){ __lastS=S; saveCache(S);
     // spoof dialect follows the engine; the Lite line resolves it from the PIF below
     SPOOF_DIALECT=(S.eng==="inject")?"inject":"fork";
     if(S.eng==="none"){ var g=document.getElementById("spoofGrp"); if(g) g.hidden=true; }

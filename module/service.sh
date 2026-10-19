@@ -226,9 +226,7 @@ fi
 
 # --- VBMeta digest (deferred, bounded) ---
 # After a bootloader unlock ro.boot.vbmeta.digest reads 0000…, which boot-hash
-# detectors flag. Resolve a valid 64-hex digest with a priority chain (the idea
-# borrowed from Specter's boot-hash resolver — minus its random fallback, which
-# fails any baseline check and can't be reproduced):
+# detectors flag. Resolve a valid 64-hex digest with a priority chain:
 #   1. a valid non-zero value the bootloader already reports -> keep it (real).
 #   2. our cached value (state key 'boot_hash') -> stable across boots, and skips
 #      re-reading the partition (that read can stall early boot on some Xiaomis).

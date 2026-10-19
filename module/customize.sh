@@ -62,7 +62,7 @@ pkill -9 -f TEESimulator 2>/dev/null || true
 # that bundles its own PlayIntegrityFork — the PIF-less "Lite" line ships none and
 # is meant to run alongside the user's own PIF, so Lite does NOT remove them.
 CONFLICT_LIST="tricky_store_v2 TrickyStore \
-  tee_simulator TEESimulator TEESimulator-RS \
+  tee_simulator TEESimulator TEESimulator-RS teesim \
   safetynet-fix Universal_SafetyNet_Fix \
   MagiskHidePropsConf \
   TA_utl tricky_addon TA_enhanced tsupport-advance \
@@ -203,13 +203,14 @@ fi
 chmod 755 "$MODPATH/daemon" "$MODPATH/supervisor" "$MODPATH/inject" \
           "$MODPATH"/*.sh 2>/dev/null
 
-# --- WebUI (KSU / APatch / MMRL) — single self-contained index.html
+# --- WebUI (KSU / APatch / MMRL)
 mkdir -p "$MODPATH/webroot"
 if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "webroot/index.html"; then
   install_file "webroot/index.html" "$MODPATH/webroot"
-  chmod 644 "$MODPATH/webroot/index.html"
-  # Magisk has no built-in WebUI host. The standalone WebUI app is fetched
-  # from GitHub and installed on the first [Action] press (see action.sh).
+  if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "webroot/main.js"; then
+    install_file "webroot/main.js" "$MODPATH/webroot"
+  fi
+  chmod 644 "$MODPATH/webroot"/*.html "$MODPATH/webroot"/*.js 2>/dev/null
   if [ "$KSU" != true ] && [ "$APATCH" != true ]; then
     ui_print "WebUI: app downloads + installs on first Action tap"
   fi
