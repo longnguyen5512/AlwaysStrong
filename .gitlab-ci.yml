@@ -29,7 +29,24 @@ nightly:
     - bash build.sh --engine trickystoreoss --build-tag "$AS_BUILD_TAG"
     - bash build.sh --engine teesim --build-tag "$AS_BUILD_TAG"
     - ls -la out/
+    # Stable, version-less copy of every variant so each has a permanent
+    # per-variant download link (GitLab serves a single artifact file by path):
+    #   https://gitlab.com/Evokerr/AlwaysStrong/-/jobs/artifacts/main/raw/out/latest/AlwaysStrong-nopif-TEESIM.zip?job=nightly
+    # mirrors what nightly.link gives on the GitHub side. The versioned zips in
+    # out/ stay for the download-all artifact archive; module.prop inside still
+    # carries the real version + nightly tag, so the copy is only renamed.
+    - |
+      set -eu
+      mkdir -p out/latest
+      for z in out/AlwaysStrong-*.zip; do
+        base=$(basename "$z" .zip)                 # AlwaysStrong-<ver>-nopif-TEESIM
+        rest=${base#"AlwaysStrong-${AS_ZIPVER}"}   # -nopif-TEESIM  (empty for default)
+        [ "$rest" = "$base" ] && { echo "unexpected zip name: $base" >&2; exit 1; }
+        cp "$z" "out/latest/AlwaysStrong${rest}.zip"
+      done
+      ls -la out/latest/
   artifacts:
     paths:
       - out/AlwaysStrong-*.zip
+      - out/latest/*.zip
     expire_in: 90 days

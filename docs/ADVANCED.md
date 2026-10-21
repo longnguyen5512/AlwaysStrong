@@ -29,6 +29,22 @@ attached to releases** — they live in the nightly builds:
   | inject + TEESimulator (JingMatrix) | [AlwaysStrong-inject-TEESIM.zip](https://nightly.link/evoker0/AlwaysStrong/workflows/nightly/main/AlwaysStrong-inject-TEESIM.zip) |
   | Lite + TEESimulator (JingMatrix) | [AlwaysStrong-nopif-TEESIM.zip](https://nightly.link/evoker0/AlwaysStrong/workflows/nightly/main/AlwaysStrong-nopif-TEESIM.zip) |
 
+  The **GitLab** nightly pipeline builds the same nine zips and serves each one
+  at a permanent per-variant link too (no login, the `latest` copy is overwritten
+  every run):
+
+  | Line | Latest nightly (GitLab) |
+  |---|---|
+  | Default (PlayIntegrityFork + TEESimulator-RS) | [AlwaysStrong.zip](https://gitlab.com/Evokerr/AlwaysStrong/-/jobs/artifacts/main/raw/out/latest/AlwaysStrong.zip?job=nightly) |
+  | inject + TEESimulator-RS | [AlwaysStrong-inject.zip](https://gitlab.com/Evokerr/AlwaysStrong/-/jobs/artifacts/main/raw/out/latest/AlwaysStrong-inject.zip?job=nightly) |
+  | Lite + TEESimulator-RS | [AlwaysStrong-nopif.zip](https://gitlab.com/Evokerr/AlwaysStrong/-/jobs/artifacts/main/raw/out/latest/AlwaysStrong-nopif.zip?job=nightly) |
+  | Fork + TrickyStoreOSS | [AlwaysStrong-TSOSS.zip](https://gitlab.com/Evokerr/AlwaysStrong/-/jobs/artifacts/main/raw/out/latest/AlwaysStrong-TSOSS.zip?job=nightly) |
+  | inject + TrickyStoreOSS | [AlwaysStrong-inject-TSOSS.zip](https://gitlab.com/Evokerr/AlwaysStrong/-/jobs/artifacts/main/raw/out/latest/AlwaysStrong-inject-TSOSS.zip?job=nightly) |
+  | Lite + TrickyStoreOSS | [AlwaysStrong-nopif-TSOSS.zip](https://gitlab.com/Evokerr/AlwaysStrong/-/jobs/artifacts/main/raw/out/latest/AlwaysStrong-nopif-TSOSS.zip?job=nightly) |
+  | Fork + TEESimulator (JingMatrix) | [AlwaysStrong-TEESIM.zip](https://gitlab.com/Evokerr/AlwaysStrong/-/jobs/artifacts/main/raw/out/latest/AlwaysStrong-TEESIM.zip?job=nightly) |
+  | inject + TEESimulator (JingMatrix) | [AlwaysStrong-inject-TEESIM.zip](https://gitlab.com/Evokerr/AlwaysStrong/-/jobs/artifacts/main/raw/out/latest/AlwaysStrong-inject-TEESIM.zip?job=nightly) |
+  | Lite + TEESimulator (JingMatrix) | [AlwaysStrong-nopif-TEESIM.zip](https://gitlab.com/Evokerr/AlwaysStrong/-/jobs/artifacts/main/raw/out/latest/AlwaysStrong-nopif-TEESIM.zip?job=nightly) |
+
  The same artifacts are on the
   [Actions tab](https://github.com/evoker0/AlwaysStrong/actions/workflows/nightly.yml)
   under the latest run (GitHub login required there). Nightlies are untested
