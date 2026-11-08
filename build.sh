@@ -84,8 +84,8 @@ TSOSS_ASSET_DEFAULT="Tricky-Store-OSS-v3.1.0-172-41383f5-Release.zip"
 # keystore2. It uses its own /data/adb/teesim/config.json layout, so attest/
 # teesim.sh bridges the AlwaysStrong keybox + target list into it. Only used with
 # --engine teesim. Pinned here; --teesim / --teesim-file override. 64-bit only.
-TEESIM_TAG_DEFAULT="canary-71"
-TEESIM_ASSET_DEFAULT="TEESimulator-v4.0-71-17be1f0-Release.zip"
+TEESIM_TAG_DEFAULT="canary-76"
+TEESIM_ASSET_DEFAULT="TEESimulator-v4.0-76-06f9f2e-Release.zip"
 
 TEE_TAG="$TEE_TAG_DEFAULT"
 TEE_ASSET="$TEE_ASSET_DEFAULT"
@@ -173,6 +173,17 @@ green()  { printf '\033[0;32m%s\033[0m\n' "$*"; }
 yellow() { printf '\033[0;33m%s\033[0m\n' "$*"; }
 bold()   { printf '\033[1m%s\033[0m\n' "$*"; }
 die()    { red "ERROR: $*"; exit 1; }
+
+# ---------- Default engine: vendored patched TEESimulator-RS ----------
+# For the default 'tee' engine, prefer the locally vendored patched build
+# (upstream v6.0.1-307 + PRs #68 #63 #77 #73 #47; see vendor/README.md) over
+# downloading the stock release, unless the user overrides with --tee-file or
+# selects another engine. `ls -t` keeps working when the zip is regenerated with
+# a newer version/commit-count.
+if [[ "$ENGINE_KIND" == "tee" && -z "$TEE_FILE" ]]; then
+    _vendor_tee=$(ls -t "$ROOT"/vendor/TEESimulator-RS-*-Release.zip 2>/dev/null | head -1)
+    [[ -n "$_vendor_tee" && -f "$_vendor_tee" ]] && TEE_FILE="$_vendor_tee"
+fi
 
 # ---------- Tool checks ----------
 need() { command -v "$1" >/dev/null 2>&1 || die "missing required tool: $1"; }
@@ -443,6 +454,92 @@ fi
 # ---------- Build one release line ----------
 # Runs once per line in $VARIANTS. The line supplies its upstream pin and file
 # lists via build.conf; the module scripts it overlays live in its ship/.
+# ---------- Refresh the shipped fallback fingerprints ----------
+# Action falls back to two static Pixel 6-series identities (pif_fallback_1/2.prop)
+# when the live fetch fails. They go stale between releases, so at build time pull
+# the current Canary build for each candidate device from the same canary-miner
+# repo the on-device fetcher (pif_native_fetch.sh) and the WebUI beta picker
+# (beta_pif.sh) use, and write it in the module's minimal 7-field format, so the
+# on-device apply path reads the exact format it already does.
+#
+# A Canary identity carries an "Estimated Expiry" and no longer holds STRONG once
+# past it, so a device counts only while unexpired (ISO dates compare as strings).
+# Of the Pixel 6 series (the only Android-12-launch Pixels that still reach STRONG)
+# just some stay maintained at a time, so slot 1 takes the newest valid device and
+# slot 2 the next valid one, reusing slot 1's device when only one is current.
+# Network failure is never fatal: a slot then keeps module/'s committed baseline,
+# so an offline build still ships a working (if older) fingerprint.
+PIF_FB_CANDIDATES=(bluejay oriole raven)
+CANARY_RAW="https://raw.githubusercontent.com/Vagelis1608/get_the_canary_miner/main/devices"
+CANARY_CDN="https://cdn.jsdelivr.net/gh/Vagelis1608/get_the_canary_miner@main/devices"
+PIF_FB_CACHE="$BUILD/pif-fallback"
+
+# Write the module's minimal fallback (the 7 fields apply_pif reads) from a full
+# canary-miner file. $1 = raw source, $2 = destination. Non-zero if a field is missing.
+write_fallback_min() {
+    local raw="$1" out="$2" man mod fp prod dev patch sdk
+    man=$(  sed -n 's/^MANUFACTURER=//p'            "$raw" | head -1)
+    mod=$(  sed -n 's/^MODEL=//p'                   "$raw" | head -1)
+    fp=$(   sed -n 's/^FINGERPRINT=//p'             "$raw" | head -1)
+    prod=$( sed -n 's/^PRODUCT=//p'                 "$raw" | head -1)
+    dev=$(  sed -n 's/^DEVICE=//p'                  "$raw" | head -1)
+    patch=$(sed -n 's/^SECURITY_PATCH=//p'          "$raw" | head -1)
+    sdk=$(  sed -n 's/^DEVICE_INITIAL_SDK_INT=//p'   "$raw" | head -1)
+    [[ -n "$man" && -n "$mod" && -n "$fp" && -n "$prod" && -n "$dev" && -n "$patch" && -n "$sdk" ]] || return 1
+    cat > "$out" <<EOF
+MANUFACTURER=$man
+MODEL=$mod
+FINGERPRINT=$fp
+PRODUCT=$prod
+DEVICE=$dev
+SECURITY_PATCH=$patch
+DEVICE_INITIAL_SDK_INT=$sdk
+EOF
+}
+
+# Populate $PIF_FB_CACHE/pif_fallback_{1,2}.prop once, before the variant loop.
+refresh_pif_fallbacks() {
+    bold "==> Refreshing fallback fingerprints (canary-miner)"
+    mkdir -p "$PIF_FB_CACHE"
+    local today; today=$(date +%Y-%m-%d)
+    local b1_raw="" b1_patch="" b2_raw="" b2_patch=""
+    local code raw patch expiry
+    for code in "${PIF_FB_CANDIDATES[@]}"; do
+        raw="$PIF_FB_CACHE/$code.raw"; rm -f "$raw"
+        if ! $FETCH "$raw" "$CANARY_RAW/$code.pif.prop" 2>/dev/null \
+           && ! $FETCH "$raw" "$CANARY_CDN/$code.pif.prop" 2>/dev/null; then
+            yellow "    $code: download failed"; continue
+        fi
+        grep -q '^FINGERPRINT=google/' "$raw" 2>/dev/null \
+            || { yellow "    $code: not a fingerprint file"; continue; }
+        patch=$(sed -n 's/^SECURITY_PATCH=//p' "$raw" | head -1)
+        expiry=$(sed -n 's/^#[[:space:]]*Estimated Expiry:[[:space:]]*//p' "$raw" | head -1)
+        if [[ -n "$expiry" && "$expiry" < "$today" ]]; then
+            yellow "    $code: canary expired $expiry, skipping"; continue
+        fi
+        # Keep the two newest-patch candidates (ISO dates sort as strings).
+        if [[ -z "$b1_patch" || "$patch" > "$b1_patch" ]]; then
+            b2_raw="$b1_raw"; b2_patch="$b1_patch"
+            b1_raw="$raw";    b1_patch="$patch"
+        elif [[ -z "$b2_patch" || "$patch" > "$b2_patch" ]]; then
+            b2_raw="$raw";    b2_patch="$patch"
+        fi
+    done
+    [[ -n "$b1_raw" && -z "$b2_raw" ]] && b2_raw="$b1_raw"   # only one valid: reuse it
+
+    local slot src dest
+    for slot in 1 2; do
+        dest="$PIF_FB_CACHE/pif_fallback_${slot}.prop"
+        [[ "$slot" == 1 ]] && src="$b1_raw" || src="$b2_raw"
+        if [[ -n "$src" ]] && write_fallback_min "$src" "$dest"; then
+            green "    slot $slot -> $(sed -n 's/^MODEL=//p' "$dest"), patch $(sed -n 's/^SECURITY_PATCH=//p' "$dest")"
+        else
+            cp -f "$MODULE_SRC/pif_fallback_${slot}.prop" "$dest"
+            yellow "    slot $slot -> committed baseline ($(sed -n 's/^MODEL=//p' "$dest"), patch $(sed -n 's/^SECURITY_PATCH=//p' "$dest"))"
+        fi
+    done
+}
+
 BUILT_ZIPS=()
 
 build_variant() {
@@ -519,6 +616,12 @@ mkdir -p "$STAGE"
 
 # 1) Our scripts/configs (the glue). These override anything from upstream.
 cp -a "$MODULE_SRC/." "$STAGE/"
+
+# 1a0) Overlay the fallback fingerprints refreshed once above (from canary-miner,
+#      or module/'s committed baseline when the build ran offline).
+for _fb in "$PIF_FB_CACHE"/pif_fallback_*.prop; do
+    [[ -f "$_fb" ]] && cp -f "$_fb" "$STAGE/"
+done
 
 # 1a) Overlay this line's own files (engine.sh, description.txt, ...) on top.
 if [[ -d "$VDIR/ship" ]]; then
@@ -922,6 +1025,9 @@ done
   ( cd "$STAGE" && zip -qr "$OUT_ZIP" . -x "*.DS_Store" )
   BUILT_ZIPS+=("$OUT_ZIP")
 }
+
+# ---------- Refresh fallback fingerprints (once, shared by every line) ----------
+refresh_pif_fallbacks
 
 # ---------- Run every requested line ----------
 for v in "${VARIANTS[@]}"; do
