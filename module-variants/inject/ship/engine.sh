@@ -104,18 +104,50 @@ engine_autopif() {
     return 0
 }
 
+# Resolve the native asfetch binary for this device's ABI (empty if there is
+# none — e.g. the build shipped no prebuilt for it, or the exec bit isn't set
+# yet during install). Its `enforce-spoof` subcommand does the whole rewrite in
+# ONE process; pure local file I/O, so it needs no watchdog/timeout.
+_engine_asfetch() {
+    case "$(uname -m 2>/dev/null)" in
+        aarch64)        _ea_abi=arm64-v8a ;;
+        armv7*|armv8l)  _ea_abi=armeabi-v7a ;;
+        x86_64)         _ea_abi=x86_64 ;;
+        i?86|i686)      _ea_abi=x86 ;;
+        *)              return 1 ;;
+    esac
+    [ -x "$MODPATH/bin/$_ea_abi/asfetch" ] && echo "$MODPATH/bin/$_ea_abi/asfetch"
+}
+
 # Apply the STRONG flags to every prop file this engine may read.
 engine_enforce_spoof() {
+    # engine_spoof_kv is deterministic (real sdk + spoof.conf, not the target
+    # file), so compute it ONCE rather than once per target file.
+    _kvs=$(engine_spoof_kv)
+    [ -n "$_kvs" ] || return 0
+    # Fast path: one native asfetch process replaces+appends every key across all
+    # target files (vs a sed + grep spawned per file). Same result as the shell
+    # fallback below on the prop files this module writes; on a file with no final
+    # newline it is actually safer (sed's append would glue onto the last line).
+    _af=$(_engine_asfetch 2>/dev/null)
+    if [ -n "$_af" ] && "$_af" enforce-spoof --kv "$_kvs" $(engine_pif_targets) 2>/dev/null; then
+        return 0
+    fi
+    # Shell fallback (no prebuilt for this ABI, or the native call failed): ONE sed
+    # pass per file (one -e per key) instead of a grep+sed per key, then append any
+    # key the file lacked (one grep per file + a spawn-free check). Idempotent, so
+    # re-running after a partial native pass is harmless.
     _sed=${SED_I:-sed -i}
+    _script=""
+    for _kv in $_kvs; do
+        _script="$_script -e s|^${_kv%=*}=.*|${_kv%=*}=${_kv#*=}|"
+    done
     for _f in $(engine_pif_targets); do
         [ -f "$_f" ] || continue
-        for _kv in $(engine_spoof_kv); do
-            _k="${_kv%=*}"; _v="${_kv#*=}"
-            if grep -qE "^${_k}=" "$_f"; then
-                $_sed "s|^${_k}=.*|${_k}=${_v}|" "$_f"
-            else
-                echo "${_k}=${_v}" >> "$_f"
-            fi
+        $_sed $_script "$_f"
+        _have=$(grep -oE '^[A-Za-z][A-Za-z0-9_]*=' "$_f" 2>/dev/null | tr -d '\n')
+        for _kv in $_kvs; do
+            case "$_have" in *"${_kv%=*}="*) ;; *) echo "$_kv" >> "$_f" ;; esac
         done
     done
 }

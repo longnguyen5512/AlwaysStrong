@@ -199,11 +199,25 @@ trap 'rm -rf "$W"; exit 130' INT
 # real Android *Canary* builds (`:CANARY/ZP11.…`), NOT the `betas/` QPR track
 # (`:17/DP11.…`), because the Canary identity is the one that holds STRONG.
 # bluejay (Pixel 6a) is the one confirmed to still hold STRONG.
-BETA_RAW="https://raw.githubusercontent.com/Vagelis1608/get_the_canary_miner/main/devices"
+# Two hosts for the SAME repo file, tried in order. raw.githubusercontent.com is
+# the origin; cdn.jsdelivr.net mirrors it over a CDN that stays reachable where
+# raw.github is throttled/blocked (common on TR / some mobile carriers). Without
+# the mirror a device on such a network can never fetch — the flashstation crawl
+# below has no bluejay canary of its own, so the refresh silently fails and the
+# phone stays frozen on whatever identity it last managed to pull (e.g. an older
+# month's security patch). jsDelivr's branch cache can lag the origin by a few
+# hours, which only ever matters for a device that cannot reach the origin at all
+# — for it a slightly-stale-but-reachable mirror beats never updating.
+BETA_HOSTS="https://raw.githubusercontent.com/Vagelis1608/get_the_canary_miner/main/devices
+https://cdn.jsdelivr.net/gh/Vagelis1608/get_the_canary_miner@main/devices"
 try_beta() { # $1=codename -> installs it into the engine, 0 on success
     _c="$1"
-    fetch "$W/$_c.pif.prop" "$BETA_RAW/$_c.pif.prop" || return 1
-    grep -q '^FINGERPRINT=google/' "$W/$_c.pif.prop" 2>/dev/null || return 1
+    _got=0
+    for _base in $BETA_HOSTS; do
+        fetch "$W/$_c.pif.prop" "$_base/$_c.pif.prop" || continue
+        grep -q '^FINGERPRINT=google/' "$W/$_c.pif.prop" 2>/dev/null && { _got=1; break; }
+    done
+    [ "$_got" = 1 ] || return 1
     # Keep only the canonical identity keys; the engine adapter appends the
     # spoof flags its own zygisk reads (the file's own spoof* lines are dropped).
     grep -E '^(MANUFACTURER|MODEL|FINGERPRINT|PRODUCT|DEVICE|SECURITY_PATCH|DEVICE_INITIAL_SDK_INT)=' \

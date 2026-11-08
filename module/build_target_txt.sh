@@ -55,6 +55,22 @@ com.google.android.gms
 com.google.android.gsf
 "
 
+# Known Play Integrity / root / attestation detector apps. Targeted in generate
+# mode ("!") by default like the Google trio (they probe the keybox chain
+# directly), and included whenever installed even with Auto targeting off. A name
+# that is not installed is simply skipped. Keep in sync with main.js DETECTORS.
+DETECTORS_LIST="
+com.eltavine.duckdetector
+gr.nikolasspyr.integritycheck
+com.henrikherzig.playintegritychecker
+rikka.safetynetchecker
+icu.nullptr.nativetest
+io.github.vvb2060.keyattestation
+com.anu.developers3k.rootchecker
+com.joeykrim.rootcheck
+com.scottyab.rootbeer.sample
+"
+
 is_installed() { printf '%s\n' "$ALL" | grep -Fxq "$1"; }
 
 # The base app pool (user installs + installed OEM wallet/store apps + the forced
@@ -75,6 +91,9 @@ build_default() {
         for p in $OEM_LIST; do is_installed "$p" && echo "$p"; done
     fi
     for p in $FORCED_LIST; do is_installed "$p" && echo "$p"; done
+    # Detector apps: include if installed, regardless of Auto targeting, so they
+    # are always spoofed (and get the "!" gen suffix via the forced-gen set below).
+    for p in $DETECTORS_LIST; do is_installed "$p" && echo "$p"; done
     # user-added custom packages (WebUI "Add custom package", stored in
     # alwaysstrong/packages). These are often system / pre-installed apps that
     # `pm list -3` never reports, so without reading this file a manually added
@@ -107,7 +126,9 @@ DEF=$(build_default | sort -u)
 #   (no line)             -> ticked, default keybox, auto; forced trio -> gen.
 MAP="$AS_APPS"
 [ -f "$MAP" ] || MAP=""
-FORCED="com.android.vending com.google.android.gms com.google.android.gsf"
+# The forced-generate set: the Google trio plus the detector apps, so both awk
+# passes below give them the "!" (generate) suffix by default.
+FORCED="com.android.vending com.google.android.gms com.google.android.gsf $(echo $DETECTORS_LIST)"
 
 {
     # --- default-keybox section (kb == "-"): plain list + per-app ! suffix ---

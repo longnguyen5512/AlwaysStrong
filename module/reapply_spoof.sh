@@ -20,6 +20,7 @@ SED_I="sed -i"
 [ -n "$BB" ] && SED_I="$BB sed -i"
 export MODPATH CONFIG_DIR SED_I
 
+[ -f "$MODPATH/as_store.sh" ] && . "$MODPATH/as_store.sh"
 [ -f "$MODPATH/engine.sh" ] || { echo "ERR: engine.sh missing"; exit 1; }
 . "$MODPATH/engine.sh"
 
@@ -32,6 +33,10 @@ if [ "${ENGINE:-none}" = none ]; then
 else
     engine_enforce_spoof
 fi
-killall -9 com.google.android.gms.unstable 2>/dev/null
-killall -9 com.android.vending 2>/dev/null
+if command -v as_killpi >/dev/null 2>&1; then
+    as_killpi
+else
+    am force-stop com.android.vending 2>/dev/null
+    am kill com.google.android.gms 2>/dev/null
+fi
 echo "OK"

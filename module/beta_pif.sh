@@ -24,6 +24,11 @@ esac
 # picker points here, matching the auto-fetch in pif_native_fetch.sh.
 API="https://api.github.com/repos/Vagelis1608/get_the_canary_miner/contents/devices"
 RAW="https://raw.githubusercontent.com/Vagelis1608/get_the_canary_miner/main/devices"
+# CDN mirror of the same repo. raw.githubusercontent.com is throttled/blocked on
+# some carriers (notably TR), where the download would fail even though api.github
+# (the `list` host) still answers — so the picker shows devices but fetching one
+# dies. jsDelivr stays reachable there; the `get` path falls back to it.
+CDN="https://cdn.jsdelivr.net/gh/Vagelis1608/get_the_canary_miner@main/devices"
 
 case "$(uname -m)" in
     aarch64)        ABI=arm64-v8a ;;
@@ -80,7 +85,7 @@ case "${1:-}" in
         else
             _tmp="/data/local/tmp/$_code.pif.prop"
         fi
-        if ! dl_to "$_tmp" "$RAW/$_code.pif.prop"; then
+        if ! dl_to "$_tmp" "$RAW/$_code.pif.prop" && ! dl_to "$_tmp" "$CDN/$_code.pif.prop"; then
             echo "ERR: download failed"; rm -f "$_tmp"; exit 1
         fi
         if ! grep -q '^FINGERPRINT=' "$_tmp" 2>/dev/null; then

@@ -228,6 +228,22 @@ if [ -f "$MODPATH/as_store.sh" ]; then
   MODPATH="$MODPATH" sh "$MODPATH/as_store.sh" migrate 2>/dev/null
   ui_print "settings: $CONFIG_DIR/alwaysstrong/"
 fi
+
+# Restore an imported / beta fingerprint that this reinstall just wiped. On Fork
+# and inject-s the active pif lives in the module dir, which was re-extracted
+# empty; import_pif.sh keeps a persistent source copy at
+# $CONFIG_DIR/custom.pif.prop. If the user had a custom pif (custom_pif=1) and
+# that copy is present, re-install it into the fresh module dir now — otherwise
+# the update strands the device with custom_pif=1 and no spoof identity, and
+# STRONG silently drops to whatever Fork's own boot autopif fetches. No-op on
+# Lite (ENGINE=none already keeps its pif under CONFIG_DIR) and when the user
+# was on the automatic fingerprint. engine.sh is sourced above.
+if [ "${ENGINE:-none}" != "none" ] && [ -s "$CONFIG_DIR/custom.pif.prop" ] && \
+   grep -q '^custom_pif=1' "$CONFIG_DIR/alwaysstrong/config" 2>/dev/null; then
+  if engine_install_pif "$CONFIG_DIR/custom.pif.prop" 2>/dev/null; then
+    ui_print "imported fingerprint restored"
+  fi
+fi
 if [ -f "$CONFIG_DIR/keybox.xml" ]; then
   ui_print "keybox kept ($(wc -c < "$CONFIG_DIR/keybox.xml") bytes)"
 else

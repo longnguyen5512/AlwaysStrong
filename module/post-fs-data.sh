@@ -88,7 +88,14 @@ resetprop_if_diff ro.secure 1
 # scrub when the user opts in via the WebUI Advanced tab.
 #   Opt-in:  hide_rom_markers=1 in alwaysstrong/config (WebUI Advanced tab)
 if as_on hide_rom_markers; then
-    for PROP in ro.lineage.build.version ro.lineage.version ro.lineage.display.version \
+    # Keep ro.lineage.build.version and ro.lineage.version: the LineageOS OTA
+    # Updater reads ro.lineage.build.version (Constants.PROP_BUILD_VERSION) and
+    # compares it in isCompatible() / canInstall(), so deleting it blanks the ROM
+    # version AND makes every OTA vanish ("no updates" / dead Install button). PI
+    # never reads these props (it uses the fingerprint / bootloader / keybox and
+    # the per-process Build.* spoof), so hiding them buys no integrity. Only the
+    # purely cosmetic markers below, which no updater reads, are scrubbed.
+    for PROP in ro.lineage.display.version \
                 ro.modversion ro.cm.version \
                 ro.crdroid.version ro.crdroid.display.version ro.crdroid.build.version; do
         delprop_if_exist "$PROP" 2>/dev/null || true

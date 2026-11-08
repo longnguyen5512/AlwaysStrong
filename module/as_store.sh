@@ -54,6 +54,40 @@ as_init() {
     return 0
 }
 
+# Recycle the Play Integrity stack so a freshly applied fingerprint / keybox
+# takes effect at once — the user shouldn't have to force-close Play Store by
+# hand for the new identity to show up.
+#
+# NOT `killall com.google.android.gms.unstable` / `killall com.android.vending`:
+#   * The DroidGuard sandbox (com.google.android.gms.unstable) runs in an
+#     isolated SELinux domain that denies SIGKILL from the shell/root domain
+#     (killall returns "Operation not permitted"), so the integrity sandbox was
+#     never actually recycled — the new fingerprint only took on the next cold
+#     boot or when the user killed it from Settings.
+#   * killall matches a process's full argv[0], so `com.android.vending` kills
+#     the main process but leaves the :background / :quick_launch children (a
+#     different argv[0]) alive, holding the stale identity.
+# Play Store (com.android.vending) takes a full `am force-stop`: it has no
+# dependency link back to the root manager app, so the stop stays contained, and
+# it clears the verdict cache plus the :background / :quick_launch children in
+# one shot.
+#
+# GMS must NOT be force-stopped. forceStopPackage also tears down every package
+# bound to GMS, and on a root manager that includes the Magisk / KernelSU /
+# APatch app running this very Action. The ROM logs it plainly:
+#   am_kill: com.topjohnwu.magisk ... stop com.google.android.gms due to from pid N
+# so the user is thrown out of the app the instant Action finishes (STRONG still
+# lands, since the spoof is already applied by then). Use `am kill`: it still
+# routes through system_server, so it signals the isolated DroidGuard sandbox
+# that killall could not (no EPERM), but it recycles only GMS's own background
+# processes without the force-stop dependency cascade. GMS restarts on demand
+# with the new props injected at fork.
+as_killpi() {
+    am force-stop com.android.vending 2>/dev/null
+    am kill com.google.android.gms 2>/dev/null
+    return 0
+}
+
 # Every setting there is, in the order the config file lists them.
 AS_KEYS="auto_fp auto_keybox status_indicator rom_spoof_block spoof_patch_props
          force_patch_props logcat_cleanup prop_unify denylist_gms auto_target hide_rom_markers
@@ -200,6 +234,32 @@ as_seed() {
 st_get() { _kv_get "$AS_STATE" "$1"; }
 st_set() { _kv_set "$AS_STATE" "$1" "$2"; }
 st_del() { _kv_del "$AS_STATE" "$1"; }
+
+# _kv_set_multi <file> <k1> <v1> [<k2> <v2> ...] — set several keys in ONE rewrite
+# of the file (one temp + mv) instead of a read-modify-write per key. Use when a
+# caller sets a batch of keys back to back (e.g. import_pif.sh): one grep + one
+# write for the lot, and as_set_multi reseeds the config just once instead of per
+# key (as_set -> as_seed walks all AS_KEYS, so N sets = N full reseeds).
+_kv_set_multi() {
+    as_init
+    _kvf="$1"; shift
+    [ -f "$_kvf" ] || : > "$_kvf"
+    _pat=""; _add=""
+    while [ "$#" -ge 2 ]; do
+        _pat="${_pat:+$_pat|}^$1="
+        _add="$_add$1=$2
+"
+        shift 2
+    done
+    [ -n "$_pat" ] || return 0
+    { grep -vE "$_pat" "$_kvf" 2>/dev/null; printf '%s' "$_add"; } > "$_kvf.new" 2>/dev/null &&
+        mv -f "$_kvf.new" "$_kvf" 2>/dev/null
+    chmod 600 "$_kvf" 2>/dev/null || :
+    unset _kvf _pat _add
+    return 0
+}
+as_set_multi() { _kv_set_multi "$AS_CONF" "$@"; as_seed; }
+st_set_multi() { _kv_set_multi "$AS_STATE" "$@"; }
 
 # --- scratch space --------------------------------------------------------
 # as_tmp <name> — a path under tmp/, created on demand. Callers append $$ when

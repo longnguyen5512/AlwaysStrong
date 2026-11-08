@@ -136,6 +136,12 @@ done
 as_on hide_rom_markers && \
     resetprop --delete init.svc.vendor.lineage_health 2>/dev/null
 
+# ProjectInfinity-X (Android 16/17) moved its PI spoof to Settings.Secure, which
+# resetprop at post-fs-data cannot reach. Clear it now that the Settings provider
+# is up. The script self-gates on rom_spoof_block + ROM detection and backs up any
+# value it clears (uninstall.sh restores it).
+[ -x "$MODPATH/rom_spoof_block.sh" ] && sh "$MODPATH/rom_spoof_block.sh" settings 2>/dev/null
+
 # --- DenyList: add the Google Play stack (entries only; never enforcement) ---
 # Runs after boot_completed so the packages are registered. denylist.sh is a
 # no-op unless denylist_gms is on, the manager is Magisk, and enforcement is off.
@@ -450,8 +456,7 @@ fi
             [ -n "$kbout" ] && echo "$kbout" | log -t "AlwaysStrong-hourly"
             if [ "$kbrc" = "0" ]; then
                 log -t "AlwaysStrong-hourly" "keybox updated, restarting PI"
-                killall -9 com.google.android.gms.unstable 2>/dev/null
-                killall -9 com.android.vending 2>/dev/null
+                as_killpi
             fi
         fi
         # Status — independent of toggles; cheap GET, idempotent module.prop write

@@ -29,6 +29,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 mod autopif;
+mod enforce;
 
 struct Url {
     https: bool,
@@ -503,6 +504,11 @@ fn main() {
         // has to catch a call that makes no progress at all.
         arm_watchdog(45, 600);
         exit(autopif::run(&args[2..]));
+    }
+
+    // Local file rewrite only — no network, so no watchdog (it can't stall).
+    if args.len() >= 2 && args[1] == "enforce-spoof" {
+        exit(enforce::run(&args[2..]));
     }
 
     if args.len() >= 3 && args[1] == "--diag" {

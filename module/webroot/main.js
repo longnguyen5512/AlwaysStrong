@@ -141,6 +141,16 @@
     setHeroModel((S.pif_model||S.model||"").trim());
     // status
     renderChecks(S.desc||"");
+    // footer: live version + attestation engine + pif variant (no longer hardcoded).
+    // ver = module.prop version, att = ATTEST= (attest.sh), eng = ENGINE= (engine.sh).
+    var footEl=document.getElementById("footLabel");
+    if(footEl){
+      var _ver=(S.ver||"").trim();
+      var _attL=({tee:"TEE-Simulator-RS",trickystoreoss:"TrickyStore-OSS",teesim:"TEESimulator"})[(S.att||"").trim()]||"TEE-Simulator-RS";
+      var _engL=({fork:"PlayIntegrityFork",inject:"PlayIntegrityFix",none:"Lite"})[(S.eng||"").trim()]||"";
+      var _tail=_engL?(_attL+" + "+_engL):_attL;
+      footEl.textContent="AlwaysStrong"+(_ver?(" "+_ver):"")+" · "+_tail;
+    }
     var kbn=S.keybox_name||"";
     var kbEl=q(".statusbar .lab small"); if(kbEl && metaKeyName) kbEl.textContent=metaKeyName; var kbRowS=q('[data-k="keybox auto check"] .s'); if(kbRowS) kbRowS.textContent=tr("kb_auto","Auto check")+" · "+(metaKeyName||kbn||"keybox.xml");
     // Automatic
@@ -357,13 +367,32 @@
     var fp=dkInput("fingerprint pixel refresh"); if(fp) fp.checked=true;
     pifClear(); toast(tr("t_back_fp","Back to automatic fingerprint"),3000);
   });
-  function pifPoll(name,tries){
+  // Honest "Applying… -> Applied ✅ / Failed" for a pif apply. Keyed off a
+  // per-apply result file the apply writes (import_pif.sh / beta_pif.sh print
+  // "OK" or "ERR:<reason>"), NOT pif_name — pif_name PERSISTS between applies,
+  // so polling it fired an instant stale "Applied ✅" before the new apply had
+  // even run. applyPif clears the marker AND launches the apply in ONE awaited
+  // root call (apply detached inside it, so the WebUI never blocks on the
+  // download), guaranteeing the first poll can't read a previous result.
+  var APPLY_RES=AS+"/tmp/apply.res";
+  function refreshPifRow(fbModel,fbName){
     ksuExec('echo "n=$(sh '+shq(STORE)+' state-get pif_name)"; echo "m=$(sh '+shq(STORE)+' state-get pif_model)"').then(function(r){
       var o={}; (r.stdout||"").split("\n").forEach(function(l){ var i=l.indexOf("="); if(i>0) o[l.slice(0,i)]=l.slice(i+1).trim(); });
-      if(o.n){ if(o.m) setHeroModel(o.m); setImpRowSel(o.m,o.n); toast(tr("t_applied","Applied ✅"),4000); if(impDel) impDel.hidden=false; }
-      else if(tries>0) setTimeout(function(){ pifPoll(name,tries-1); },1200);
-      else { toast(tr("t_applied","Applied ✅"),3000); if(impDel) impDel.hidden=false; }
+      var m=o.m||fbModel, n=o.n||fbName; if(m) setHeroModel(m); if(n) setImpRowSel(m,n); if(impDel) impDel.hidden=false;
     });
+  }
+  function applyPoll(label,tries,fbModel,fbName){
+    ksuExec("cat "+shq(APPLY_RES)+" 2>/dev/null").then(function(r){
+      var out=(r.stdout||"").trim();
+      if(/(^|\n)OK\b/.test(out)){ toast(tr("t_applied","Applied ✅"),4000); refreshPifRow(fbModel,fbName); }
+      else if(/ERR/.test(out)){ var msg=out.replace(/^[\s\S]*?ERR:?\s*/,"").split("\n")[0].slice(0,80); toast(tr("t_apply_fail","Apply failed")+(msg?": "+msg:""),5000); }
+      else if(tries>0){ setTimeout(function(){ applyPoll(label,tries-1,fbModel,fbName); },300); }
+      else { toast(tr("t_apply_slow","Still applying…"),3000); refreshPifRow(fbModel,fbName); }
+    });
+  }
+  function applyPif(cmd,label,tries,fbModel,fbName){
+    toast(tr("t_applying","Applying")+" "+label+"…",60000);
+    ksuExec("mkdir -p "+shq(AS+"/tmp")+"; rm -f "+shq(APPLY_RES)+"; ( { "+cmd+" ; } > "+shq(APPLY_RES)+" 2>&1 & ) ; echo go").then(function(){ applyPoll(label,tries||40,fbModel,fbName); });
   }
 
   // ---- Beta Pixel fingerprints (Advanced accordion) ----
@@ -403,12 +432,14 @@
     betaAcc.addEventListener("click",function(e){ var b=e.target&&e.target.closest?e.target.closest(".beta[data-c]"):null; if(!b) return;
       if(betaBusy) return; var code=b.dataset.c; if(!code) return; betaBusy=true;
       qa(".beta",betaAcc).forEach(function(x){ x.classList.remove("sel"); }); b.classList.add("sel");
-      deferBg("sh "+shq(MOD+"/beta_pif.sh")+" get "+shq(code));
       setting("auto_fp",0); setting("custom_pif",1);
       var fp=dkInput("fingerprint pixel refresh"); if(fp) fp.checked=false;
       var label=BETA_MODELS[code]||code; setHeroModel(label);
       if(impDel) impDel.hidden=false; setImpRowSel(label,code+".pif.prop");
-      toast(tr("t_applying","Applying")+" "+label+"…",3500);
+      // Download + install in the background, with honest Applying -> Applied/Failed
+      // feedback (applyPif). Beta pulls over the network, so allow ~60s (50 polls)
+      // vs the local file-import's ~17s before the "still applying" note.
+      applyPif("sh "+shq(MOD+"/beta_pif.sh")+" get "+shq(code), label, 200, label, code+".pif.prop");
       setTimeout(function(){ betaBusy=false; },1200);
     });
   }
@@ -420,6 +451,11 @@
   var appsList=document.getElementById("appsList");
   var appq=document.getElementById("appq");
   var FORCED={"com.android.vending":1,"com.google.android.gms":1,"com.google.android.gsf":1};
+  // Known Play Integrity / root / attestation detector apps. They default to
+  // generate mode ("!") like the Google trio (they probe the keybox chain
+  // directly) and stay targeted whenever installed. A name that is not installed
+  // is inert. Keep in sync with build_target_txt.sh DETECTORS_LIST.
+  var DETECTORS={"com.eltavine.duckdetector":1,"gr.nikolasspyr.integritycheck":1,"com.henrikherzig.playintegritychecker":1,"rikka.safetynetchecker":1,"icu.nullptr.nativetest":1,"io.github.vvb2060.keyattestation":1,"com.anu.developers3k.rootchecker":1,"com.joeykrim.rootcheck":1,"com.scottyab.rootbeer.sample":1};
   var EXCLUDE={}; ["com.topjohnwu.magisk","io.github.vvb2060.magisk","io.github.huskydg.magisk","me.weishu.kernelsu","com.rifsxd.ksunext","com.sukisu.ultra","me.bmax.apatch","me.garfieldhan.apatch.next","org.lsposed.manager","com.termux","bin.mt.plus","bin.mt.plus.canary","xzr.konabess","io.github.a13e300.ksuwebui","moe.shizuku.privileged.api","com.dergoogler.mmrl","com.dergoogler.mmrl.wx","org.swiftapps.swiftbackup","com.google.android.apps.maps","com.google.android.apps.translate","com.google.android.apps.youtube.music","com.google.android.keep","com.google.android.youtube","com.google.earth","org.zwanoo.android.speedtest","com.android.chrome"].forEach(function(p){ EXCLUDE[p]=1; });
   var MAPF=AS+"/apps.map", PKGS=AS+"/packages";
   var apps=[], labels={}, appMap={};
@@ -429,8 +465,11 @@
   // first-letter avatar.
   function avatarHtml(p){ var l=esc(avatarFor(p,labels[p]));
     return '<span class="appav" data-ltr="'+l+'"><img src="ksu://icon/'+encodeURIComponent(p)+'" alt="" loading="lazy" onerror="this.parentNode.textContent=this.parentNode.getAttribute(\'data-ltr\')"></span>'; }
-  function specOf(pkg){ var v=appMap[pkg]; if(v==="off") return {off:true}; if(!v) return {kb:"-",mode:FORCED[pkg]?"gen":"auto"}; var b=v.split("|"); return {kb:b[0]||"-",mode:b[1]||"auto"}; }
-  function avatarFor(pkg,lbl){ var src=lbl; if(!src){ var parts=String(pkg||"").split("."); src=(parts.length>1?parts[1]:parts[0])||pkg; } src=String(src).replace(/^[^A-Za-z0-9]+/,""); return (src.charAt(0)||"?").toUpperCase(); }
+  function specOf(pkg){ var v=appMap[pkg]; if(v==="off") return {off:true}; if(!v) return {kb:"-",mode:(FORCED[pkg]||DETECTORS[pkg])?"gen":"auto"}; var b=v.split("|"); return {kb:b[0]||"-",mode:b[1]||"auto"}; }
+  // No label (a host without getPackagesInfo, e.g. the a13e300 KSUWebUI): take the
+  // letter from the app-specific LAST package segment, not the vendor segment, so
+  // com.eltavine.duckdetector shows "D" (duckdetector) instead of "E" (eltavine).
+  function avatarFor(pkg,lbl){ var src=lbl; if(!src){ var parts=String(pkg||"").split(".").filter(Boolean); src=parts.length?parts[parts.length-1]:pkg; } src=String(src).replace(/^[^A-Za-z0-9]+/,""); return (src.charAt(0)||"?").toUpperCase(); }
   function loadMap(){ return ksuExec("cat "+shq(MAPF)+" 2>/dev/null").then(function(r){ appMap={}; (r.stdout||"").split("\n").forEach(function(l){ if(!l) return; var i=l.indexOf("\t"); if(i<1) return; appMap[l.slice(0,i).trim()]=l.slice(i+1).trim(); }); }); }
   function saveMap(){ var body=""; Object.keys(appMap).sort().forEach(function(p){ if(appMap[p]) body+=p+"\t"+appMap[p]+"\n"; }); deferBg("mkdir -p "+shq(AS)+" && printf %s "+shq(body)+" > "+shq(MAPF)+"; sh "+shq(MOD+"/build_target_txt.sh")+" "+shq(CFG+"/target.txt")); }
   function loadApps(){ return ksuExec("{ pm list packages -3; echo com.google.android.gms; echo com.google.android.gsf; echo com.android.vending; cat "+shq(PKGS)+" 2>/dev/null; } 2>/dev/null | sed 's/^package://' | sort -u").then(function(r){ apps=(r.stdout||"").split("\n").map(function(s){ return s.trim(); }).filter(Boolean); labels={};
@@ -626,9 +665,8 @@
           ksuExec("grep -m1 '^MODEL=' "+shq(path)+" 2>/dev/null | cut -d= -f2- | tr -d '\"\\r'").then(function(mr){ var mdl=(mr.stdout||"").trim(); setHeroModel(mdl); setImpRowSel(mdl,name); });
           setting("custom_pif",1); setting("auto_fp",0); var fp=dkInput("fingerprint pixel refresh"); if(fp) fp.checked=false;
           if(impDel) impDel.hidden=false;
-          toast(tr("t_applying","Applying")+" "+name+"…",6000);
-          deferBg("sh "+shq(STORE)+" state-del pif_name; sh "+shq(STORE)+" state-del pif_model; sh "+shq(MOD+"/import_pif.sh")+" "+shq(path));
-          pifPoll(name,14);
+          // Honest Applying -> Applied/Failed (applyPif); local file, so ~17s (14 polls).
+          applyPif("sh "+shq(MOD+"/import_pif.sh")+" "+shq(path), name, 56, "", name);
         }); });
       return;
     }

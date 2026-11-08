@@ -14,10 +14,13 @@ pkill -9 -f TEESimulator 2>/dev/null || true
 pkill -9 -f org.matrix.TEESimulator 2>/dev/null || true
 pkill -9 -f io.github.beakthoven.TrickyStoreOSS 2>/dev/null || true
 
-# Kill GMS + Vending so they reload without our hooks
-killall -9 com.google.android.gms.unstable 2>/dev/null
-killall -9 com.google.android.gms 2>/dev/null
+# Kill GMS + Vending so they reload without our hooks. Vending takes a full
+# force-stop (contained, clears its children). GMS takes am kill, not force-stop:
+# both route through system_server so they reach the SELinux-isolated DroidGuard
+# sandbox that killall cannot, but force-stopping GMS would cascade through the
+# package dependency graph and tear down the manager app mid-uninstall.
 am force-stop com.android.vending 2>/dev/null
+am kill com.google.android.gms 2>/dev/null
 
 # Remove the DenyList entries we added (entries only, never the enforcement
 # toggle). Only on Magisk; rm by package drops all of that package's processes.
@@ -26,6 +29,18 @@ if command -v magisk >/dev/null 2>&1; then
              com.google.android.gm com.anu.developers3k.rootchecker \
              gr.nikolasspyr.integritycheck io.github.vvb2060.keyattestation; do
         magisk --denylist rm "$p" >/dev/null 2>&1
+    done
+fi
+
+# Restore any ProjectInfinity-X Settings.Secure spoof config that rom_spoof_block
+# cleared (one file per key under alwaysstrong/rom_secure_backup), so removing
+# AlwaysStrong frees the ROM's own PI spoofer again. Must run BEFORE the directory
+# is removed below. Best-effort: needs the Settings provider (device booted).
+BK_SECURE="$CONFIG_DIR/alwaysstrong/rom_secure_backup"
+if [ -d "$BK_SECURE" ] && command -v settings >/dev/null 2>&1; then
+    for f in "$BK_SECURE"/*; do
+        [ -f "$f" ] || continue
+        settings put secure "$(basename "$f")" "$(cat "$f")" 2>/dev/null
     done
 fi
 

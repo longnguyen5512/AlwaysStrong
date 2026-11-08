@@ -1,5 +1,16 @@
 # AlwaysStrong changelog
 
+## v1.0.6
+
+**Fixes**
+- **The monthly security patch reaches every device again.** The fingerprint fetch pulled only from `raw.githubusercontent.com`, which is throttled or blocked on some carriers (notably TR); with no Pixel 6 fallback on the flashstation API, the hourly refresh there failed silently and the phone stayed frozen on an older month's patch. Both the automatic refresh and the beta picker now fall back to a jsDelivr CDN mirror of the same repo, so a blocked GitHub host no longer strands a device on a stale patch.
+- **A picked or imported fingerprint reaches Play Store without a manual restart, and Action no longer drops you out of the manager app.** The GMS / DroidGuard recycle now uses `am kill`: `killall` cannot signal the SELinux-isolated DroidGuard sandbox (so the new fingerprint only landed after reopening Play Store by hand), while `am force-stop` reached the sandbox but cascaded through the package dependency graph and closed the root manager app itself as Action finished. `am kill` reaches the sandbox through system_server without the cascade.
+- **The WebUI tells the truth while applying.** Selecting a fingerprint shows a real "Applying → Applied" (and surfaces the actual error on failure) instead of flashing straight to "Applied" before anything landed.
+- **The beta picker accepts an already-complete Canary fingerprint** instead of reporting "engine rejected the fingerprint".
+
+**Changed**
+- **Faster fingerprint apply.** The STRONG spoof flags are enforced in a single native pass (`asfetch enforce-spoof`) rather than a `sed` + `grep` spawned per prop file, and the four settings writes are batched into one. Every step falls back to the pure-shell path on any device without a native prebuilt, so behaviour is identical everywhere.
+
 ## v1.0.5
 
 **New**
