@@ -94,11 +94,15 @@ AS_KEYS="auto_fp auto_keybox status_indicator rom_spoof_block spoof_patch_props
          custom_keybox custom_pif patch_system patch_vendor patch_boot interval_sec"
 
 # What a setting means when nothing has been written. Everything the module does
-# on its own is on; the two opt-ins are off.
+# on its own is on; the opt-ins are off. spoof_patch_props is opt-in: by default
+# the device keeps its real Settings / getprop patch date (Play Integrity reads
+# the patch through the PIF hook + the TEE attestation, both of which still
+# follow the fingerprint), and only a user who wants Build.VERSION.SECURITY_PATCH
+# rewritten to the attested date turns it on.
 as_default() {
     case "$1" in
-        auto_fp|auto_keybox|status_indicator|rom_spoof_block|spoof_patch_props|logcat_cleanup|prop_unify|denylist_gms|auto_target) echo 1 ;;
-        custom_keybox|custom_pif|force_patch_props|hide_rom_markers) echo 0 ;;
+        auto_fp|auto_keybox|status_indicator|rom_spoof_block|logcat_cleanup|prop_unify|denylist_gms|auto_target) echo 1 ;;
+        custom_keybox|custom_pif|spoof_patch_props|force_patch_props|hide_rom_markers) echo 0 ;;
         interval_sec) echo 3600 ;;
         *) echo "" ;;
     esac

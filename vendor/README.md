@@ -22,6 +22,23 @@ upstream has not merged to main since 2026-07-11).
 Only `module/changelog.md` conflicted (two prepended entries); resolved as a union.
 Net change vs upstream: 14 files, +316/-61, no code conflicts.
 
+### Corresponding source (GPL-3.0)
+
+TEESimulator-RS is GPL-3.0, so the exact source of the bundled binary ships with
+it. It is upstream `Enginex0/TEESimulator-RS` at commit `6d241e5` (tag
+`v6.0.1-307`) plus **`teesimulator-rs-v6.1.0-313.patch`** in this directory, the
+combined diff of the five PRs above (14 files, +316/-61). To get the full source
+the binary was built from:
+
+```sh
+git clone --recursive https://github.com/Enginex0/TEESimulator-RS teesim
+cd teesim && git checkout 6d241e5
+git apply /path/to/vendor/teesimulator-rs-v6.1.0-313.patch
+```
+
+Then build as below. The patch is the authoritative record; the PR list is for
+provenance and can drift if upstream force-pushes or deletes a branch.
+
 ### Regenerating (WSL)
 
 The Windows host can't build Android; WSL (Ubuntu) has the full toolchain

@@ -2,14 +2,30 @@
 
 ## v1.0.6
 
+**New**
+- **Patched TEESimulator-RS keystore (v6.1.0-313).** The bundled attestation engine now carries the open community fixes for Android 17 / KeyMint v5 that upstream has not released yet: A17 Canary injection, correct osVersion / attestVersion / keymasterVersion, a per-instance VINTF scan, an RSA block-mode fix, a cached-response purge so a key survives an app "clear data", and Xiaomi / Redmi / Poco secure-boot alias normalization. Source and the exact PRs are credited under Upstream.
+- **"Spoof security patch" is back as an opt-in (Advanced, default off).** When on, it rewrites the system patch date (Settings / getprop) to the attested value for the rare key-attestation checker that compares the two. Off, the default, keeps your device's real patch date, so custom-ROM users no longer see it frozen. Play Integrity is unaffected either way (it reads the patch through the fingerprint hook and the TEE attestation).
+
 **Fixes**
-- **The monthly security patch reaches every device again.** The fingerprint fetch pulled only from `raw.githubusercontent.com`, which is throttled or blocked on some carriers (notably TR); with no Pixel 6 fallback on the flashstation API, the hourly refresh there failed silently and the phone stayed frozen on an older month's patch. Both the automatic refresh and the beta picker now fall back to a jsDelivr CDN mirror of the same repo, so a blocked GitHub host no longer strands a device on a stale patch.
-- **A picked or imported fingerprint reaches Play Store without a manual restart, and Action no longer drops you out of the manager app.** The GMS / DroidGuard recycle now uses `am kill`: `killall` cannot signal the SELinux-isolated DroidGuard sandbox (so the new fingerprint only landed after reopening Play Store by hand), while `am force-stop` reached the sandbox but cascaded through the package dependency graph and closed the root manager app itself as Action finished. `am kill` reaches the sandbox through system_server without the cascade.
+- **The monthly security patch reaches every device again.** The fingerprint fetch pulled only from `raw.githubusercontent.com`, which is throttled or blocked on some carriers; with no Pixel 6 fallback on the flashstation API, the hourly refresh there failed silently and the phone stayed frozen on an older month's patch. Both the automatic refresh and the beta picker now fall back to a jsDelivr CDN mirror of the same repo, so a blocked GitHub host no longer strands a device on a stale patch.
+- **A picked or imported fingerprint takes effect right away.** The Play Integrity recycle reaches Google's DroidGuard sandbox through `am kill` (which `killall` cannot signal), so a new fingerprint or keybox applies without force-closing Play Store by hand.
 - **The WebUI tells the truth while applying.** Selecting a fingerprint shows a real "Applying → Applied" (and surfaces the actual error on failure) instead of flashing straight to "Applied" before anything landed.
 - **The beta picker accepts an already-complete Canary fingerprint** instead of reporting "engine rejected the fingerprint".
+- **Better ROM-spoof blocking for custom ROMs.** "Block ROM spoof" now also neutralizes ProjectInfinity-X on its newer schemes (the Android 16 / 17 Settings.Secure keys, not just the older PixelProps / pihooks props); every change is backed up and restored on uninstall.
+- **LineageOS Updater works again.** "Hide ROM identity" no longer clears the `ro.lineage.*` build props the Updater reads, so OTA checks keep working; only the cosmetic ROM markers are hidden.
 
 **Changed**
 - **Faster fingerprint apply.** The STRONG spoof flags are enforced in a single native pass (`asfetch enforce-spoof`) rather than a `sed` + `grep` spawned per prop file, and the four settings writes are batched into one. Every step falls back to the pure-shell path on any device without a native prebuilt, so behaviour is identical everywhere.
+- **Detector apps are targeted automatically.** Known integrity-detector apps (Duck Detector and others) are added to the target list in generate mode by default, like the Play stack.
+- **The beta fingerprint picker no longer labels a print "STRONG".** Reaching STRONG depends on the device (only models that launched on Android 12 or earlier can), not on the fingerprint alone, so the badge was misleading.
+
+**Upstream**
+- Keystore: [TEESimulator-RS](https://github.com/Enginex0/TEESimulator-RS) v6.0.1-307 plus open PRs [#68](https://github.com/Enginex0/TEESimulator-RS/pull/68) and [#73](https://github.com/Enginex0/TEESimulator-RS/pull/73) (Android 17 / KeyMint v5), [#63](https://github.com/Enginex0/TEESimulator-RS/pull/63) (RSA block mode), [#77](https://github.com/Enginex0/TEESimulator-RS/pull/77) (cached-response purge) and [#47](https://github.com/Enginex0/TEESimulator-RS/pull/47) (Xiaomi secure-boot aliases). GPL-3.0 open source, thanks to its author and the PR contributors.
+- PlayIntegrityFork: post-v18 CI (unchanged from v1.0.5).
+
+**Builds**
+- Three release zips: `AlwaysStrong-<ver>.zip` (default / Fork), `-inject.zip`, `-nopif.zip` (Lite), all on the patched TEESimulator-RS.
+- Want a different keystore? The TrickyStoreOSS (`-TSOSS`) and TEESimulator-by-JingMatrix (`-TEESIM`) engines stay nightly-only, never in a release: grab a build from the [download table in docs/ADVANCED.md](https://gitlab.com/Evokerr/AlwaysStrong/-/blob/main/docs/ADVANCED.md#optional-keystore-engines--tsoss--teesim) or build with `./build.sh --engine trickystoreoss` / `--engine teesim`.
 
 ## v1.0.5
 
