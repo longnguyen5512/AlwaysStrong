@@ -21,7 +21,7 @@
 
 **Upstream**
 - Keystore: [TEESimulator-RS](https://github.com/Enginex0/TEESimulator-RS) v6.0.1-307 plus open PRs [#68](https://github.com/Enginex0/TEESimulator-RS/pull/68) and [#73](https://github.com/Enginex0/TEESimulator-RS/pull/73) (Android 17 / KeyMint v5), [#63](https://github.com/Enginex0/TEESimulator-RS/pull/63) (RSA block mode), [#77](https://github.com/Enginex0/TEESimulator-RS/pull/77) (cached-response purge) and [#47](https://github.com/Enginex0/TEESimulator-RS/pull/47) (Xiaomi secure-boot aliases). GPL-3.0 open source, thanks to its author and the PR contributors.
-- PlayIntegrityFork: post-v18 CI (unchanged from v1.0.5).
+- PlayIntegrityFork v19.
 
 **Builds**
 - Three release zips: `AlwaysStrong-<ver>.zip` (default / Fork), `-inject.zip`, `-nopif.zip` (Lite), all on the patched TEESimulator-RS.
