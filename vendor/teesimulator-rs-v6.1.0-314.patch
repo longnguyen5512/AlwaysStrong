@@ -205,7 +205,7 @@ index 5123ea9..a4f3ea3 100644
              if (current.isEmpty()) {
                  SystemLogger.debug("BootStateManager: $name absent on this device, skip")
 diff --git a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/KeyMintSecurityLevelInterceptor.kt b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/KeyMintSecurityLevelInterceptor.kt
-index 9378577..a8573a0 100644
+index 9378577..494d6f3 100644
 --- a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/KeyMintSecurityLevelInterceptor.kt
 +++ b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/KeyMintSecurityLevelInterceptor.kt
 @@ -224,15 +224,17 @@ class KeyMintSecurityLevelInterceptor(
@@ -347,6 +347,16 @@ index 9378577..a8573a0 100644
              )
          }
  
+@@ -1796,6 +1815,9 @@ private fun KeyMintAttestation.toAuthorizations(
+     this.padding.forEach {
+         authList.add(createAuth(Tag.PADDING, KeyParameterValue.paddingMode(it)))
+     }
++    this.rsaOaepMgfDigest.forEach {
++        authList.add(createAuth(Tag.RSA_OAEP_MGF_DIGEST, KeyParameterValue.digest(it)))
++    }
+     if (this.rsaPublicExponent != null) {
+         authList.add(
+             createAuth(
 diff --git a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/SoftwareOperation.kt b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/SoftwareOperation.kt
 index af97919..d18552e 100644
 --- a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/SoftwareOperation.kt
@@ -648,63 +658,6 @@ index 8e2dc4d..966996e 100644
  
  [plugins]
  android-application = { id = "com.android.application", version.ref = "agp" }
-diff --git a/module/changelog.md b/module/changelog.md
-index 2f89ed8..933f8c0 100644
---- a/module/changelog.md
-+++ b/module/changelog.md
-@@ -3,6 +3,52 @@
- 
- ---
- 
-+## TEESimulator-RS v6.1.0
-+
-+Android 17 / KeyMint v5 support. Closes the version-reporting gaps that made forged
-+attestations inconsistent with the device on Android 17, which STRONG integrity checks
-+can cross-verify.
-+
-+### Android 17 / KeyMint v5
-+- `osVersion` now reports 170000 on SDK 37 (was pinned to 160000 for any unmapped SDK).
-+  Unmapped future SDKs derive `(SDK-20)*10000` instead of a hardcoded release.
-+- `attestVersion` / `keymasterVersion` now report 500 (KeyMint 5.0) on SDK 37 (was 400).
-+- VINTF parsing now scans APEX-mounted fragments under `/apex/*/etc/vintf`, matching how
-+  libvintf assembles the device manifest.
-+- VINTF resolution is per-instance: the TEE reads the `default` instance and StrongBox
-+  reads the `strongbox` instance, so a StrongBox declaration (or its absence) no longer
-+  contaminates the TEE version, and vice versa.
-+
-+### KeyMint v5 tolerance
-+- Stub `Algorithm` gains `ML_DSA = 4`; stub `Tag` gains `ML_DSA_VARIANT`.
-+- `KeyParameterValue` stub gains the `mlDsaVariant` union member (tag 15).
-+- `KeyMintAttestation` parses `ML_DSA_VARIANT` without throwing. ML-DSA keys are never
-+  forged — a request for one falls through to the real TEE as before.
-+- An unrecognized EC curve no longer crashes attestation parsing.
-+## TEESimulator-RS v6.0.1-309
-+
-+Fixes Xiaomi/Redmi/Poco bootloader-state disclosure through vendor system-property aliases.
-+
-+### Boot-state spoofing
-+- Xiaomi/Redmi/Poco vendor aliases are now normalized alongside the standard AVB properties. In particular, `ro.secureboot.lockstate` no longer remains `unlocked` while `ro.boot.flash.locked` and `ro.boot.vbmeta.device_state` report a locked device.
-+- Windows builds now normalize module installer and shell scripts to LF so KernelSU/Magisk can execute them.
-+
-+### Verified
-+- On a Redmi Android 14 device, the standard AVB and Xiaomi secure-boot properties all report a consistent locked/green state after applying the new overrides.
-+
-+### 中文说明
-+
-+修复 Xiaomi/Redmi/Poco 通过厂商系统属性别名泄露 bootloader 解锁状态的问题。
-+
-+**启动状态伪装**
-+- Xiaomi/Redmi/Poco 的厂商属性别名现在会与标准 AVB 属性一起归一化，避免 `ro.boot.flash.locked` 和 `ro.boot.vbmeta.device_state` 已显示锁定时，`ro.secureboot.lockstate` 仍泄露 `unlocked`。
-+- Windows 环境打包时会将模块安装器和 Shell 脚本统一为 LF 换行，确保 KernelSU/Magisk 可以正常执行。
-+
-+**验证**
-+- 已在 Redmi Android 14 设备上验证：应用新增覆盖后，标准 AVB 与 Xiaomi secure-boot 属性均一致报告 locked/green。
-+
-+---
-+
- ## TEESimulator-RS v6.0.1-307
- 
- Fixes five gaps in the module's TEE key-operation and attestation emulation. Two of them fix crashes in real app crypto on a broken-TEE device: any app using an AndroidKeyStore HMAC key or an RSA-OAEP-SHA256 key was throwing. This is a beta; the confirmation logs are in the debug build only, and nothing is field-verified yet.
 diff --git a/stub/src/main/java/android/hardware/security/keymint/Algorithm.java b/stub/src/main/java/android/hardware/security/keymint/Algorithm.java
 index a9f6907..74a6e25 100644
 --- a/stub/src/main/java/android/hardware/security/keymint/Algorithm.java

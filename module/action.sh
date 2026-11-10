@@ -53,18 +53,36 @@ if [ "$1" = "logs" ] && [ -x "$MODPATH/collect_logs.sh" ]; then
 fi
 
 CONFIG_DIR=/data/adb/tricky_store
+LINE="========================="
+VER=$(grep -m1 '^version=' "$MODPATH/module.prop" 2>/dev/null | cut -d= -f2-)
+# A non-release build carries its tag in module.prop: v1.0.4 (74-abc1234-nightly).
+# The header is three lines on a phone screen, so keep the plain version.
+VER=${VER%% (*}
+
+row() { echo "    $1   $2"; }
+
+# --- Header first: print BEFORE any init that might hang or fail. ---
+# A blank Action screen means nothing reached stdout. Print the banner as the
+# very first thing so the user always knows the script started.
+echo ""
+echo "  $LINE"
+row "🔒" "AlwaysStrong  ${VER}"
+echo "  $LINE"
+echo ""
+
+_au=$(sed -n 's/^author=//p' "$MODPATH/module.prop" 2>/dev/null)
+case "$_au" in *[Ee]vokerr*) ;; *)
+  row "⚠️" "UNOFFICIAL BUILD"
+  row "⚠️" "Original author removed."
+  row "⚠️" "Official: gitlab.com/Evokerr/AlwaysStrong"
+  row "⚠️" "          t.me/keyboxstrong"
+  echo ""
+;; esac
+
 # Our own settings/state/logs (one directory, see as_store.sh).
 [ -f "$MODPATH/as_store.sh" ] && . "$MODPATH/as_store.sh" && as_init
 : "${AS_LOGS:=/data/adb/tricky_store/alwaysstrong/logs}"
 mkdir -p "$AS_LOGS" 2>/dev/null
-LINE="========================="
-VER=$(grep -m1 '^version=' "$MODPATH/module.prop" 2>/dev/null | cut -d= -f2-)
-# A non-release build carries its tag in module.prop - v1.0.4 (74-abc1234-nightly)
-# - which the manager, the WebUI and a collected log all show. This header is
-# three lines on a phone screen, so it keeps the plain version.
-VER=${VER%% (*}
-
-row() { echo "    $1   $2"; }
 
 # --- ABI + fetchers ---
 case "$(uname -m)" in
@@ -86,7 +104,7 @@ done
 SED_I="sed -i"
 [ -n "$BB" ] && SED_I="$BB sed -i"
 
-# bounded SECS cmd... — run cmd under a hard wall-clock cap. A fetcher that
+# bounded SECS cmd... -- run cmd under a hard wall-clock cap. A fetcher that
 # never returns (asfetch / wget / curl stuck on a dead route, a hung DNS, a
 # TLS stall) used to freeze the whole Action: status_fetch and the first-tap
 # keybox fetch called it with no bound at all, so the screen sat after the last
@@ -113,7 +131,9 @@ bounded() { _bs="$1"; shift; if [ -n "$TO" ]; then $TO "$_bs" "$@"; else "$@"; f
 if [ -f "$MODPATH/engine.sh" ]; then
     . "$MODPATH/engine.sh"
 else
-    echo "  engine.sh missing — broken install, reflash the module"; exit 1
+    row "❌" "engine.sh missing"
+    row "❌" "broken install, reflash the module"
+    exit 1
 fi
 
 # asfetch first (connects IPv4-first, works on IPv6-only-DNS networks); fall
@@ -132,22 +152,6 @@ dl_to() {
     if command -v wget >/dev/null 2>&1; then rm -f "$1"; bounded 600 wget -q -T 60 -O "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
     return 1
 }
-
-# --- Header ---
-echo ""
-echo "  $LINE"
-row "🔒" "AlwaysStrong  ${VER}"
-echo "  $LINE"
-echo ""
-
-_au=$(sed -n 's/^author=//p' "$MODPATH/module.prop" 2>/dev/null)
-case "$_au" in *[Ee]vokerr*) ;; *)
-  row "⚠️" "UNOFFICIAL BUILD"
-  row "⚠️" "Original author removed."
-  row "⚠️" "Official: gitlab.com/Evokerr/AlwaysStrong"
-  row "⚠️" "          t.me/keyboxstrong"
-  echo ""
-;; esac
 
 row "⏳" "initializing..."
 sleep 3

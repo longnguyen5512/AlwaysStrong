@@ -157,7 +157,7 @@ mkdir -p "$MODPATH/zygisk"
 ZN=0
 for z in arm64-v8a armeabi-v7a x86 x86_64; do
   if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "zygisk/$z.so"; then
-    unzip -qqjo "$ZIPFILE" "zygisk/$z.so" -d "$MODPATH/zygisk" 2>/dev/null
+    unzip -qqo "$ZIPFILE" "zygisk/$z.so" -d "$MODPATH" 2>/dev/null
     ZN=$((ZN+1))
   fi
 done
@@ -188,7 +188,8 @@ fi
 # --- aswatcher native binary (inotify target.txt + Xposed exclude + conflict)
 mkdir -p "$MODPATH/bin/$ABI_DIR"
 if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "bin/$ABI_DIR/aswatcher"; then
-  install_file "bin/$ABI_DIR/aswatcher" "$MODPATH/bin/$ABI_DIR"
+  unzip -qqo "$ZIPFILE" "bin/$ABI_DIR/aswatcher" -d "$MODPATH" \
+    || abort "extract failed: bin/$ABI_DIR/aswatcher"
   chmod 755 "$MODPATH/bin/$ABI_DIR/aswatcher"
 else
   ui_print "warning: no aswatcher binary for $ABI_DIR"
@@ -196,7 +197,8 @@ fi
 
 # --- asfetch native HTTPS fetcher (arm devices only; TLS fallback for CDNs)
 if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "bin/$ABI_DIR/asfetch"; then
-  install_file "bin/$ABI_DIR/asfetch" "$MODPATH/bin/$ABI_DIR"
+  unzip -qqo "$ZIPFILE" "bin/$ABI_DIR/asfetch" -d "$MODPATH" \
+    || abort "extract failed: bin/$ABI_DIR/asfetch"
   chmod 755 "$MODPATH/bin/$ABI_DIR/asfetch"
 fi
 
@@ -206,9 +208,11 @@ chmod 755 "$MODPATH/daemon" "$MODPATH/supervisor" "$MODPATH/inject" \
 # --- WebUI (KSU / APatch / MMRL)
 mkdir -p "$MODPATH/webroot"
 if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "webroot/index.html"; then
-  install_file "webroot/index.html" "$MODPATH/webroot"
+  unzip -qqo "$ZIPFILE" "webroot/index.html" -d "$MODPATH" \
+    || abort "extract failed: webroot/index.html"
   if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "webroot/main.js"; then
-    install_file "webroot/main.js" "$MODPATH/webroot"
+    unzip -qqo "$ZIPFILE" "webroot/main.js" -d "$MODPATH" \
+      || abort "extract failed: webroot/main.js"
   fi
   chmod 644 "$MODPATH/webroot"/*.html "$MODPATH/webroot"/*.js 2>/dev/null
   if [ "$KSU" != true ] && [ "$APATCH" != true ]; then

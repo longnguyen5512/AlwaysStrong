@@ -55,9 +55,9 @@ done
 if [ "$MODE" = "settings" ]; then
     command -v settings >/dev/null 2>&1 || exit 0
     BKDIR="$CONFIG_DIR/alwaysstrong/rom_secure_backup"
-    for k in spoof_pif_config spoof_pif_photos spoof_pif_netflix spoof_pif_snapchat \
-             spoof_gameprops_config spoof_trickystore_target spoof_trickystore_keybox \
-             spoof_trickystore_patch keybox_data; do
+    for k in spoof_pif_config spoof_pif_vending spoof_pif_photos spoof_pif_netflix \
+             spoof_pif_snapchat spoof_gameprops_config spoof_trickystore_target \
+             spoof_trickystore_keybox spoof_trickystore_patch keybox_data; do
         v=$(settings get secure "$k" 2>/dev/null)
         [ "$v" = "null" ] && v=""
         [ -n "$v" ] || continue
@@ -105,6 +105,7 @@ set_persist persist.sys.pixelprops.qsb                            false
 set_persist persist.sys.pixelprops.all                           false
 set_persist persist.sys.pixelprops.gphotos                       false
 set_persist persist.sys.gameprops.enabled                        false
+set_persist persist.sys.pixelprops.vending                        false
 set_persist persist.sys.pp.gms                                    false
 set_persist persist.sys.pp.finsky                                 false
 
@@ -116,7 +117,7 @@ set_persist persist.sys.pp.finsky                                 false
 # their enabled-by-default state: that was the Infinity-X bug where our own
 # post-fs-data pass set persist.sys.pixelprops.gms=false and then this wipe
 # removed it, so the ROM spoof silently came back after every reboot.
-KEEP=" persist.sys.pihooks.disable.gms_props persist.sys.pihooks.disable.gms_key_attestation_block persist.sys.pixelprops persist.sys.pixelprops.all persist.sys.pixelprops.gms persist.sys.pixelprops.gapps persist.sys.pixelprops.google persist.sys.pixelprops.gphotos persist.sys.pixelprops.pi persist.sys.pixelprops.qsb "
+KEEP=" persist.sys.pihooks.disable.gms_props persist.sys.pihooks.disable.gms_key_attestation_block persist.sys.pixelprops persist.sys.pixelprops.all persist.sys.pixelprops.gms persist.sys.pixelprops.gapps persist.sys.pixelprops.google persist.sys.pixelprops.gphotos persist.sys.pixelprops.pi persist.sys.pixelprops.qsb persist.sys.pixelprops.vending "
 getprop 2>/dev/null | grep -E '(pihook|pixelprops)' | sed 's/^\[\(.*\)\]:.*/\1/' | \
 while IFS= read -r prop; do
     [ -z "$prop" ] && continue

@@ -1,6 +1,6 @@
 # vendor/ — patched upstream artifacts
 
-## TEESimulator-RS-v6.1.0-313-Release.zip
+## TEESimulator-RS-v6.1.0-314-Release.zip
 
 A patched build of the TEE-Simulator-RS attestation engine that `build.sh` bundles
 by default for the `tee` engine (the stock release is no longer downloaded unless
@@ -19,21 +19,27 @@ upstream has not merged to main since 2026-07-11).
 | #77 | Purge cached TEE responses on `clearNamespace` so a key survives an app "clear data" (was failing with KEY_NOT_FOUND). |
 | #47 | Normalize Xiaomi/Redmi/Poco secure-boot aliases (`ro.secureboot.lockstate` etc.) so Key Attestation reports deviceLocked/Verified. |
 
+**Additional fix** (not from an upstream PR):
+
+| Commit | Fix |
+|--------|-----|
+| 0cfad42 | `toAuthorizations()` now emits `RSA_OAEP_MGF_DIGEST` in generateKey characteristics. Without this, apps checking key metadata on KeyMint 3+ (Android 14+) see missing MGF digest, which Duck Detector flags and banking apps reject. The earlier upstream fix (1f96c8a) only patched `createOperation`. |
+
 Only `module/changelog.md` conflicted (two prepended entries); resolved as a union.
-Net change vs upstream: 14 files, +316/-61, no code conflicts.
+Net change vs upstream: 14 files, +319/-61, no code conflicts.
 
 ### Corresponding source (GPL-3.0)
 
 TEESimulator-RS is GPL-3.0, so the exact source of the bundled binary ships with
 it. It is upstream `Enginex0/TEESimulator-RS` at commit `6d241e5` (tag
-`v6.0.1-307`) plus **`teesimulator-rs-v6.1.0-313.patch`** in this directory, the
-combined diff of the five PRs above (14 files, +316/-61). To get the full source
-the binary was built from:
+`v6.0.1-307`) plus **`teesimulator-rs-v6.1.0-314.patch`** in this directory, the
+combined diff of the five PRs above plus the MGF digest fix (14 files, +319/-61).
+To get the full source the binary was built from:
 
 ```sh
 git clone --recursive https://github.com/Enginex0/TEESimulator-RS teesim
 cd teesim && git checkout 6d241e5
-git apply /path/to/vendor/teesimulator-rs-v6.1.0-313.patch
+git apply /path/to/vendor/teesimulator-rs-v6.1.0-314.patch
 ```
 
 Then build as below. The patch is the authoritative record; the PR list is for
