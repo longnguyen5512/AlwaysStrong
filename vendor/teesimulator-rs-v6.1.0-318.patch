@@ -204,8 +204,200 @@ index 5123ea9..a4f3ea3 100644
              val current = SystemProperties.get(name, "")
              if (current.isEmpty()) {
                  SystemLogger.debug("BootStateManager: $name absent on this device, skip")
+diff --git a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/InterceptorUtils.kt b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/InterceptorUtils.kt
+index 8e1076e..fbab8f5 100644
+--- a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/InterceptorUtils.kt
++++ b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/InterceptorUtils.kt
+@@ -34,12 +34,12 @@ object InterceptorUtils {
+             7 -> "Error::Rc(KEY_NOT_FOUND)"
+             10 -> "Error::Rc(BACKEND_BUSY)"
+             -3 -> "Error::Km(UNSUPPORTED_KEY_SIZE)"
+-            -6 -> "Error::Km(INCOMPATIBLE_PURPOSE)"
+-            -7 -> "Error::Km(INCOMPATIBLE_ALGORITHM)"
+-            -29 -> "Error::Km(TOO_MANY_OPERATIONS)"
+-            -49 -> "Error::Km(UNSUPPORTED_TAG)"
+-            -75 -> "Error::Km(INVALID_INPUT_LENGTH)"
+-            -76 -> "Error::Km(INVALID_TAG)"
++            -3 -> "Error::Km(INCOMPATIBLE_PURPOSE)"
++            -5 -> "Error::Km(INCOMPATIBLE_ALGORITHM)"
++            -31 -> "Error::Km(TOO_MANY_OPERATIONS)"
++            -39 -> "Error::Km(UNSUPPORTED_TAG)"
++            -21 -> "Error::Km(INVALID_INPUT_LENGTH)"
++            -40 -> "Error::Km(INVALID_TAG)"
+             else -> if (errorCode > 0) "Error::Rc($errorCode)" else "Error::Km($errorCode)"
+         }
+ 
+diff --git a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/AuthorizeCreate.kt b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/AuthorizeCreate.kt
+index ec3ad29..3c01e3c 100644
+--- a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/AuthorizeCreate.kt
++++ b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/AuthorizeCreate.kt
+@@ -2,6 +2,7 @@ package org.matrix.TEESimulator.interception.keystore.shim
+ 
+ import android.hardware.security.keymint.Algorithm
+ import android.hardware.security.keymint.BlockMode
++import android.hardware.security.keymint.Digest
+ import android.hardware.security.keymint.KeyParameter
+ import android.hardware.security.keymint.KeyPurpose
+ import android.hardware.security.keymint.PaddingMode
+@@ -10,6 +11,16 @@ import org.matrix.TEESimulator.attestation.KeyMintAttestation
+ 
+ object AuthorizeCreate {
+ 
++    private const val INCOMPATIBLE_MGF_DIGEST = -78
++    private const val UNSUPPORTED_MGF_DIGEST = -79
++    private val supportedMgfDigests = setOf(
++        Digest.SHA1,
++        Digest.SHA_2_224,
++        Digest.SHA_2_256,
++        Digest.SHA_2_384,
++        Digest.SHA_2_512,
++    )
++
+     fun check(
+         keyParams: KeyMintAttestation?,
+         opParams: KeyMintAttestation,
+@@ -57,18 +68,24 @@ object AuthorizeCreate {
+         if (opParams.digest.any { it !in keyParams.digest }) {
+             return KeystoreErrorCodes.incompatibleDigest
+         }
+-        if (opParams.rsaOaepMgfDigest.any { it !in keyParams.rsaOaepMgfDigest }) {
+-            return KeystoreErrorCodes.incompatibleDigest
++        val isRsaOaep = keyParams.algorithm == Algorithm.RSA &&
++            (opParams.padding.firstOrNull() ?: keyParams.padding.firstOrNull()) == PaddingMode.RSA_OAEP
++        val requestedMgfDigests =
++            if (isRsaOaep) opParams.rsaOaepMgfDigest.ifEmpty { listOf(Digest.SHA1) }
++            else opParams.rsaOaepMgfDigest
++        if (requestedMgfDigests.any { it !in supportedMgfDigests }) {
++            return UNSUPPORTED_MGF_DIGEST
++        }
++        // A key with no explicit MGF authorization uses the legacy SHA-1 default.
++        val authorizedMgfDigests = keyParams.rsaOaepMgfDigest.ifEmpty { listOf(Digest.SHA1) }
++        if (requestedMgfDigests.any { it !in authorizedMgfDigests }) {
++            return INCOMPATIBLE_MGF_DIGEST
+         }
+ 
+-        if (keyParams.algorithm == Algorithm.AES && opParams.blockMode.contains(BlockMode.GCM)) {
+-            val requestedMacLength = opParams.minMacLength
+-            val keyMinMacLength = keyParams.minMacLength
+-            if (
+-                requestedMacLength != null &&
+-                    keyMinMacLength != null &&
+-                    requestedMacLength < keyMinMacLength
+-            ) {
++        if (keyParams.algorithm == Algorithm.AES &&
++            (opParams.blockMode.firstOrNull() ?: keyParams.blockMode.firstOrNull()) == BlockMode.GCM) {
++            val bits = opParams.macLength ?: return -53
++            if (!CryptoMacLengths.valid(bits, maxOf(96, keyParams.minMacLength ?: 96), 128)) {
+                 return KeystoreErrorCodes.invalidMacLength
+             }
+         }
+diff --git a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/CryptoMacLengths.kt b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/CryptoMacLengths.kt
+new file mode 100644
+index 0000000..02b174c
+--- /dev/null
++++ b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/CryptoMacLengths.kt
+@@ -0,0 +1,6 @@
++package org.matrix.TEESimulator.interception.keystore.shim
++
++internal object CryptoMacLengths {
++    fun valid(bits: Int, minimum: Int, maximum: Int): Boolean =
++        bits > 0 && bits % 8 == 0 && bits >= minimum && bits <= maximum
++}
+diff --git a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/GeneratedKeyPersistence.kt b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/GeneratedKeyPersistence.kt
+index 181cc6a..a5eb3f0 100644
+--- a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/GeneratedKeyPersistence.kt
++++ b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/GeneratedKeyPersistence.kt
+@@ -72,6 +72,7 @@ object GeneratedKeyPersistence {
+         return fileLocks.computeIfAbsent(filename) { ReentrantLock() }
+     }
+ 
++    @Synchronized
+     fun save(
+         keyId: KeyIdentifier,
+         keyPair: KeyPair?,
+@@ -97,7 +98,8 @@ object GeneratedKeyPersistence {
+         try {
+             SystemLogger.debug("[Persistence] Lock acquired for $filename")
+             runCatching {
+-                    PERSISTENCE_DIR.mkdirs()
++                    check(PERSISTENCE_DIR.isDirectory || PERSISTENCE_DIR.mkdirs())
++                    android.system.Os.chmod(PERSISTENCE_DIR.absolutePath, 448)
+                     val finalFile = File(PERSISTENCE_DIR, filename)
+                     val tmpFile = File(PERSISTENCE_DIR, "$filename.tmp")
+ 
+@@ -156,6 +158,8 @@ object GeneratedKeyPersistence {
+ 
+                     // Atomic rename — if this fails the tmp is left behind and cleaned on next
+                     // deleteAll
++                    android.system.Os.chmod(tmpFile.absolutePath, 384)
++                    FileOutputStream(tmpFile, true).use { it.fd.sync() }
+                     if (!tmpFile.renameTo(finalFile)) {
+                         tmpFile.delete()
+                         throw IllegalStateException(
+@@ -170,13 +174,14 @@ object GeneratedKeyPersistence {
+ 
+                     SystemLogger.debug("Persisted key: $keyId")
+                 }
+-                .onFailure { e -> SystemLogger.error("Failed to persist key $keyId", e) }
++                .onFailure { e -> SystemLogger.error("Failed to persist key $keyId", e); throw e }
+         } finally {
+             lock.unlock()
+             SystemLogger.debug("[Persistence] Lock released for $filename")
+         }
+     }
+ 
++    @Synchronized
+     fun delete(keyId: KeyIdentifier) {
+         runCatching {
+                 val file = File(PERSISTENCE_DIR, keyFileName(keyId.uid, keyId.alias))
+@@ -185,15 +190,16 @@ object GeneratedKeyPersistence {
+                         fileLocks.remove(keyFileName(keyId.uid, keyId.alias))
+                         SystemLogger.debug("Deleted persisted key: $keyId")
+                     } else {
+-                        SystemLogger.warning("Failed to delete persisted key file: ${file.name}")
++                        throw IOException("Failed to delete persisted key file: ${file.name}")
+                     }
+                 } else {
+                     SystemLogger.debug("No persisted file to delete for: $keyId")
+                 }
+             }
+-            .onFailure { e -> SystemLogger.error("Failed to delete persisted key $keyId", e) }
++            .onFailure { e -> SystemLogger.error("Failed to delete persisted key $keyId", e); throw e }
+     }
+ 
++    @Synchronized
+     fun deleteAll() {
+         runCatching {
+                 if (!PERSISTENCE_DIR.exists()) {
+@@ -208,15 +214,16 @@ object GeneratedKeyPersistence {
+                 var count = 0
+                 files.forEach { file ->
+                     if (file.name.endsWith(".bin") || file.name.endsWith(".tmp")) {
+-                        if (file.delete()) count++
++                        if (file.delete()) count++ else throw IOException("Failed to delete ${file.name}")
+                     }
+                 }
+                 fileLocks.clear()
+                 SystemLogger.info("Deleted $count persisted key files")
+             }
+-            .onFailure { e -> SystemLogger.error("Failed to delete all persisted keys", e) }
++            .onFailure { e -> SystemLogger.error("Failed to delete all persisted keys", e); throw e }
+     }
+ 
++    @Synchronized
+     fun loadAll(securityLevel: Int): List<PersistedKeyData> {
+         if (!PERSISTENCE_DIR.exists()) {
+             SystemLogger.debug("No persistent_keys directory, nothing to load")
+@@ -327,6 +334,7 @@ object GeneratedKeyPersistence {
+     // reconstructing authorization parameters from the response. This avoids
+     // pulling keymint Tag dependencies into this file and is correct because
+     // the only field that changes post-generation is the patched cert chain.
++    @Synchronized
+     fun rePersistIfNeeded(
+         callingUid: Int,
+         generatedKeyInfo: KeyMintSecurityLevelInterceptor.GeneratedKeyInfo,
 diff --git a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/KeyMintSecurityLevelInterceptor.kt b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/KeyMintSecurityLevelInterceptor.kt
-index 9378577..494d6f3 100644
+index 9378577..4d3942d 100644
 --- a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/KeyMintSecurityLevelInterceptor.kt
 +++ b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/KeyMintSecurityLevelInterceptor.kt
 @@ -224,15 +224,17 @@ class KeyMintSecurityLevelInterceptor(
@@ -246,7 +438,49 @@ index 9378577..494d6f3 100644
              patchedChains[keyId] = newChain
              teeResponses[keyId] =
                  KeyEntryResponse().apply {
-@@ -706,11 +706,10 @@ class KeyMintSecurityLevelInterceptor(
+@@ -460,7 +460,7 @@ class KeyMintSecurityLevelInterceptor(
+                             padding = parsedParams.padding.ifEmpty { keyParams.padding },
+                             rsaOaepMgfDigest =
+                                 parsedParams.rsaOaepMgfDigest.ifEmpty {
+-                                    keyParams.rsaOaepMgfDigest
++                                    listOf(Digest.SHA1)
+                                 },
+                             nonce = parsedParams.nonce,
+                             minMacLength = parsedParams.minMacLength ?: keyParams.minMacLength,
+@@ -486,7 +486,7 @@ class KeyMintSecurityLevelInterceptor(
+                 if (keyParams?.usageCountLimit != null) {
+                     val limit = keyParams.usageCountLimit
+                     val remaining =
+-                        usageCounters.getOrPut(resolvedKeyId) {
++                        usageCounters.computeIfAbsent(resolvedKeyId) {
+                             java.util.concurrent.atomic.AtomicInteger(limit)
+                         }
+                     if (remaining.get() <= 0) {
+@@ -496,13 +496,16 @@ class KeyMintSecurityLevelInterceptor(
+                             RESPONSE_KEY_NOT_FOUND
+                         )
+                     }
+-                    softwareOperation.onFinishCallback = {
+-                        if (remaining.decrementAndGet() <= 0) {
+-                            cleanupKeyData(resolvedKeyId)
+-                            usageCounters.remove(resolvedKeyId)
+-                            SystemLogger.info(
+-                                "Key $resolvedKeyId exhausted (USAGE_COUNT_LIMIT=$limit)."
+-                            )
++                    softwareOperation.finishGuard = { action ->
++                        synchronized(remaining) {
++                            if (remaining.get() <= 0) {
++                                throw android.os.ServiceSpecificException(RESPONSE_KEY_NOT_FOUND)
++                            }
++                            val result = action()
++                            remaining.decrementAndGet()
++                            // Keep the exhausted budget attached until the next create/delete.
++                            // Never let an old operation delete a replacement key at this alias.
++                            result
+                         }
+                     }
+                 }
+@@ -706,11 +709,10 @@ class KeyMintSecurityLevelInterceptor(
  
                  val keyId = KeyIdentifier(callingUid, keyDescriptor.alias)
  
@@ -262,7 +496,7 @@ index 9378577..494d6f3 100644
  
                  // Device-ID attestation must be forged, not patched: the real TEE returns
                  // CANNOT_ATTEST_IDS, so there is no real chain to patch — only a synthetic one
-@@ -720,21 +719,32 @@ class KeyMintSecurityLevelInterceptor(
+@@ -720,21 +722,32 @@ class KeyMintSecurityLevelInterceptor(
                  // attest RSA in the TEE yet not in StrongBox, so the probe must match the request.
                  // Devices that can attest keep their genuine chain via PATCH, which strict callers
                  // accept where a forgery is rejected.
@@ -308,7 +542,7 @@ index 9378577..494d6f3 100644
  
                  SystemLogger.trace {
                      "[TRACE-$txId] dispatch: forceGen=$forceGenerate hasChallenge=${challenge != null} isSymmetric=$isSymmetric isAttestKey=$isAttestKeyRequest"
-@@ -759,7 +769,6 @@ class KeyMintSecurityLevelInterceptor(
+@@ -759,7 +772,6 @@ class KeyMintSecurityLevelInterceptor(
                      }
                      else -> {
                          logProbe("PASSTHROUGH")
@@ -316,7 +550,34 @@ index 9378577..494d6f3 100644
                          TransactionResult.Continue
                      }
                  }
-@@ -1513,6 +1522,9 @@ class KeyMintSecurityLevelInterceptor(
+@@ -862,7 +874,7 @@ class KeyMintSecurityLevelInterceptor(
+                         }
+                     }
+                     .getOrNull()
+-            persistExecutor.execute {
++            run {
+                 GeneratedKeyPersistence.save(
+                     keyId = keyId,
+                     keyPair = null,
+@@ -987,7 +999,7 @@ class KeyMintSecurityLevelInterceptor(
+                     }
+                     .getOrNull()
+             }
+-        persistExecutor.execute {
++        run {
+             GeneratedKeyPersistence.save(
+                 keyId = keyId,
+                 keyPair = keyData.first,
+@@ -1505,7 +1517,7 @@ class KeyMintSecurityLevelInterceptor(
+         private const val STRONGBOX_KEYGEN_LATENCY_FLOOR_MS = 250L
+         private const val STRONGBOX_OP_LATENCY_FLOOR_MS = 80L
+         private const val TEE_OP_LATENCY_FLOOR_MS = 4L
+-        private const val KEYMINT_TOO_MANY_OPERATIONS = -29
++        private const val KEYMINT_TOO_MANY_OPERATIONS = -31
+         private const val KEYMINT_CANNOT_ATTEST_IDS = -66
+         private const val KEYMINT_UNKNOWN_ERROR = -1000
+         private const val SECURE_HW_COMMUNICATION_FAILED = -49
+@@ -1513,6 +1525,9 @@ class KeyMintSecurityLevelInterceptor(
          private const val STRONGBOX_MAX_CONCURRENT_OPS = 4
          private const val STRONGBOX_OP_WINDOW_NS = 10_000_000_000L // 10s
  
@@ -326,7 +587,7 @@ index 9378577..494d6f3 100644
          private fun isStrongBoxCapable(params: KeyMintAttestation): Boolean =
              when (params.algorithm) {
                  Algorithm.RSA -> params.keySize <= 2048
-@@ -1695,11 +1707,18 @@ class KeyMintSecurityLevelInterceptor(
+@@ -1695,11 +1710,18 @@ class KeyMintSecurityLevelInterceptor(
  
          /** Clears every synthetic key owned by [uid] (maintenance.clearNamespace, Domain.APP). */
          fun clearNamespaceKeys(uid: Int) {
@@ -347,21 +608,41 @@ index 9378577..494d6f3 100644
              )
          }
  
-@@ -1796,6 +1815,9 @@ private fun KeyMintAttestation.toAuthorizations(
+@@ -1796,6 +1818,14 @@ private fun KeyMintAttestation.toAuthorizations(
      this.padding.forEach {
          authList.add(createAuth(Tag.PADDING, KeyParameterValue.paddingMode(it)))
      }
-+    this.rsaOaepMgfDigest.forEach {
-+        authList.add(createAuth(Tag.RSA_OAEP_MGF_DIGEST, KeyParameterValue.digest(it)))
++    this.rsaOaepMgfDigest.distinct().forEach {
++        authList.add(
++            createAuth(
++                Tag.RSA_OAEP_MGF_DIGEST,
++                KeyParameterValue.digest(it),
++            )
++        )
 +    }
      if (this.rsaPublicExponent != null) {
          authList.add(
              createAuth(
 diff --git a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/SoftwareOperation.kt b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/SoftwareOperation.kt
-index af97919..d18552e 100644
+index af97919..8f6cfb3 100644
 --- a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/SoftwareOperation.kt
 +++ b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/SoftwareOperation.kt
-@@ -100,13 +100,21 @@ private object JcaAlgorithmMapper {
+@@ -70,10 +70,13 @@ private object JcaAlgorithmMapper {
+     fun mapSignatureAlgorithm(params: KeyMintAttestation): String {
+         val digest =
+             when (params.digest.firstOrNull()) {
++                Digest.NONE -> "NONE"
++                Digest.SHA1 -> "SHA1"
++                Digest.SHA_2_224 -> "SHA224"
+                 Digest.SHA_2_256 -> "SHA256"
+                 Digest.SHA_2_384 -> "SHA384"
+                 Digest.SHA_2_512 -> "SHA512"
+-                else -> "NONE"
++                else -> throw ServiceSpecificException(KeystoreErrorCodes.incompatibleDigest)
+             }
+         return when (params.algorithm) {
+             Algorithm.EC -> "${digest}withECDSA"
+@@ -100,13 +103,21 @@ private object JcaAlgorithmMapper {
                          "Unsupported cipher algorithm: ${params.algorithm}",
                      )
              }
@@ -389,6 +670,175 @@ index af97919..d18552e 100644
              }
          val padding =
              when (params.padding.firstOrNull()) {
+@@ -127,15 +138,17 @@ private object JcaAlgorithmMapper {
+             Digest.SHA_2_256 -> "SHA-256"
+             Digest.SHA_2_384 -> "SHA-384"
+             Digest.SHA_2_512 -> "SHA-512"
+-            else -> "SHA-256"
++            else -> throw ServiceSpecificException(KeystoreErrorCodes.incompatibleDigest)
+         }
+ 
+     fun mapMacAlgorithm(params: KeyMintAttestation): String =
+         when (params.digest.firstOrNull()) {
++            Digest.SHA1 -> "HmacSHA1"
++            Digest.SHA_2_224 -> "HmacSHA224"
+             Digest.SHA_2_256 -> "HmacSHA256"
+             Digest.SHA_2_384 -> "HmacSHA384"
+             Digest.SHA_2_512 -> "HmacSHA512"
+-            else -> "HmacSHA256"
++            else -> throw ServiceSpecificException(KeystoreErrorCodes.incompatibleDigest)
+         }
+ }
+ 
+@@ -199,8 +212,16 @@ private class CipherPrimitive(
+     private val cipher: Cipher =
+         Cipher.getInstance(JcaAlgorithmMapper.mapCipherAlgorithm(params)).apply {
+             val nonce = params.nonce
+-            if (nonce != null && isAead) {
+-                init(opMode, cryptoKey, javax.crypto.spec.GCMParameterSpec(128, nonce))
++            if (isAead) {
++                val bits = params.macLength ?: throw ServiceSpecificException(-53)
++                if (!CryptoMacLengths.valid(bits, maxOf(96, params.minMacLength ?: 96), 128)) {
++                    throw ServiceSpecificException(KeystoreErrorCodes.invalidMacLength)
++                }
++                val iv = nonce ?: if (opMode == Cipher.ENCRYPT_MODE) {
++                    ByteArray(12).also { java.security.SecureRandom().nextBytes(it) }
++                } else throw ServiceSpecificException(-51)
++                if (iv.size != 12) throw ServiceSpecificException(-52)
++                init(opMode, cryptoKey, javax.crypto.spec.GCMParameterSpec(bits, iv))
+             } else if (nonce != null) {
+                 init(opMode, cryptoKey, javax.crypto.spec.IvParameterSpec(nonce))
+             } else if (params.padding.firstOrNull() == PaddingMode.RSA_OAEP) {
+@@ -208,7 +229,7 @@ private class CipherPrimitive(
+                 val mgfDigest =
+                     params.rsaOaepMgfDigest.firstOrNull()?.let {
+                         JcaAlgorithmMapper.mapOaepDigest(it)
+-                    } ?: mainDigest
++                    } ?: "SHA-1"
+                 init(
+                     opMode,
+                     cryptoKey,
+@@ -299,8 +320,11 @@ private class MacPrimitive(
+         val full = mac.doFinal()
+         // Tag.MAC_LENGTH is optional on the AndroidKeyStore Mac SPI; default to the
+         // full digest length so real Mac use keeps working when it is omitted.
+-        val tagBytes = (params.macLength ?: (full.size * 8)) / 8
+-        val tag = full.copyOf(tagBytes)
++        val bits = params.macLength ?: (full.size * 8)
++        if (!CryptoMacLengths.valid(bits, params.minMacLength ?: 64, full.size * 8)) {
++            throw ServiceSpecificException(KeystoreErrorCodes.invalidMacLength)
++        }
++        val tag = full.copyOf(bits / 8)
+         if (params.purpose.firstOrNull() == KeyPurpose.VERIFY) {
+             if (signature == null) {
+                 throw ServiceSpecificException(
+@@ -339,6 +363,7 @@ class SoftwareOperation(
+         private set
+ 
+     var onFinishCallback: (() -> Unit)? = null
++    internal var finishGuard: ((() -> ByteArray?) -> ByteArray?)? = null
+ 
+     val beginParameters: KeyParameters?
+         get() {
+@@ -464,6 +489,7 @@ class SoftwareOperation(
+         }
+     }
+ 
++    @Synchronized
+     fun updateAad(aadInput: ByteArray?) {
+         SystemLogger.info(
+             "[SoftwareOp TX_ID: $txId] updateAad() ENTRY inputSize=${aadInput?.size ?: 0} primitive=${primitive::class.simpleName}"
+@@ -485,6 +511,7 @@ class SoftwareOperation(
+         }
+     }
+ 
++    @Synchronized
+     fun update(data: ByteArray?): ByteArray? {
+         SystemLogger.debug("[SoftwareOp TX_ID: $txId] update() inputSize=${data?.size ?: 0}")
+         checkActive()
+@@ -499,12 +526,15 @@ class SoftwareOperation(
+         }
+     }
+ 
++    @Synchronized
+     fun finish(data: ByteArray?, signature: ByteArray?): ByteArray? {
+         checkActive()
+-        checkInputLength(data)
+         try {
++            checkInputLength(data)
+             val startNs = if (latencyFloorMs > 0) System.nanoTime() else 0L
+-            val result = primitive.finish(data, signature)
++            val action = { primitive.finish(data, signature) }
++            val guard = finishGuard
++            val result = if (guard == null) action() else guard(action)
+             if (latencyFloorMs > 0) {
+                 val elapsedMs = (System.nanoTime() - startNs) / 1_000_000
+                 val delayMs = latencyFloorMs - elapsedMs
+@@ -519,9 +549,12 @@ class SoftwareOperation(
+         } catch (e: Exception) {
+             SystemLogger.error("[SoftwareOp TX_ID: $txId] Failed to finish operation.", e)
+             throw mapToServiceSpecificException(e)
++        } finally {
++            finalized = true
+         }
+     }
+ 
++    @Synchronized
+     fun abort() {
+         finalized = true
+         primitive.abort()
+@@ -532,6 +565,8 @@ class SoftwareOperation(
+         when (e) {
+             is SignatureException ->
+                 ServiceSpecificException(KeystoreErrorCodes.verificationFailed, e.message)
++            is javax.crypto.AEADBadTagException ->
++                ServiceSpecificException(KeystoreErrorCodes.verificationFailed, e.message)
+             is javax.crypto.BadPaddingException ->
+                 ServiceSpecificException(KeystoreErrorCodes.invalidArgument, e.message)
+             is javax.crypto.IllegalBlockSizeException ->
+@@ -556,7 +591,7 @@ internal object KeystoreErrorCodes {
+     }
+ 
+     val invalidTag: Int by lazy {
+-        resolveField("android.hardware.security.keymint.ErrorCode", "INVALID_TAG", -76)
++        resolveField("android.hardware.security.keymint.ErrorCode", "INVALID_TAG", -40)
+     }
+ 
+     val verificationFailed: Int by lazy {
+@@ -572,27 +607,27 @@ internal object KeystoreErrorCodes {
+     }
+ 
+     val incompatibleKey: Int by lazy {
+-        resolveField("android.hardware.security.keymint.ErrorCode", "INCOMPATIBLE_KEY", -31)
++        resolveField("android.hardware.security.keymint.ErrorCode", "INVALID_KEY_BLOB", -33)
+     }
+ 
+     val incompatiblePurpose: Int by lazy {
+-        resolveField("android.hardware.security.keymint.ErrorCode", "INCOMPATIBLE_PURPOSE", -13)
++        resolveField("android.hardware.security.keymint.ErrorCode", "INCOMPATIBLE_PURPOSE", -3)
+     }
+ 
+     val unsupportedPurpose: Int by lazy {
+-        resolveField("android.hardware.security.keymint.ErrorCode", "UNSUPPORTED_PURPOSE", -14)
++        resolveField("android.hardware.security.keymint.ErrorCode", "UNSUPPORTED_PURPOSE", -2)
+     }
+ 
+     val incompatibleAlgorithm: Int by lazy {
+-        resolveField("android.hardware.security.keymint.ErrorCode", "INCOMPATIBLE_ALGORITHM", -18)
++        resolveField("android.hardware.security.keymint.ErrorCode", "INCOMPATIBLE_ALGORITHM", -5)
+     }
+ 
+     val keyNotYetValid: Int by lazy {
+-        resolveField("android.hardware.security.keymint.ErrorCode", "KEY_NOT_YET_VALID", -39)
++        resolveField("android.hardware.security.keymint.ErrorCode", "KEY_NOT_YET_VALID", -24)
+     }
+ 
+     val keyExpired: Int by lazy {
+-        resolveField("android.hardware.security.keymint.ErrorCode", "KEY_EXPIRED", -40)
++        resolveField("android.hardware.security.keymint.ErrorCode", "KEY_EXPIRED", -25)
+     }
+ 
+     val callerNonceProhibited: Int by lazy {
 diff --git a/app/src/main/java/org/matrix/TEESimulator/pki/CertificateHelper.kt b/app/src/main/java/org/matrix/TEESimulator/pki/CertificateHelper.kt
 index 4fc2136..90f8979 100644
 --- a/app/src/main/java/org/matrix/TEESimulator/pki/CertificateHelper.kt
@@ -733,6 +1183,35 @@ index 0000000..e5f22c8
 +        assertEquals("1", BootStateManager.targetOverrides["ro.boot.secureboot"])
 +        assertEquals("1", BootStateManager.targetOverrides["ro.secureboot.devicelock"])
 +        assertEquals("locked", BootStateManager.targetOverrides["ro.secureboot.lockstate"])
++    }
++}
+diff --git a/app/src/test/java/org/matrix/TEESimulator/interception/keystore/shim/CryptoMacLengthsTest.kt b/app/src/test/java/org/matrix/TEESimulator/interception/keystore/shim/CryptoMacLengthsTest.kt
+new file mode 100644
+index 0000000..c8a8656
+--- /dev/null
++++ b/app/src/test/java/org/matrix/TEESimulator/interception/keystore/shim/CryptoMacLengthsTest.kt
+@@ -0,0 +1,23 @@
++package org.matrix.TEESimulator.interception.keystore.shim
++
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class CryptoMacLengthsTest {
++    @Test fun rejectsInvalidMacLengths() {
++        for (bits in listOf(-8, 0, 1, 63, 65, 257, 264)) {
++            assertFalse(CryptoMacLengths.valid(bits, 64, 256))
++        }
++        assertTrue(CryptoMacLengths.valid(64, 64, 256))
++        assertTrue(CryptoMacLengths.valid(256, 64, 256))
++    }
++    @Test fun validatesGcmTags() {
++        for (bits in listOf(96, 104, 112, 120, 128)) {
++            assertTrue(CryptoMacLengths.valid(bits, 96, 128))
++        }
++        for (bits in listOf(0, 64, 95, 97, 136)) {
++            assertFalse(CryptoMacLengths.valid(bits, 96, 128))
++        }
 +    }
 +}
 diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
