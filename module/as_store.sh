@@ -82,9 +82,20 @@ as_init() {
 # that killall could not (no EPERM), but it recycles only GMS's own background
 # processes without the force-stop dependency cascade. GMS restarts on demand
 # with the new props injected at fork.
+#
+# `am` is not always usable though. On some Android 17 builds (seen on a Pixel
+# 10 Pro Fold, CP2A.260605.012, Magisk 31.1) the binder call behind it fails:
+#   cmd: Failure calling service activity: Failed transaction (2147483646)
+# so neither call does anything, Play Store / DroidGuard keep the old keybox and
+# fingerprint, and STRONG never lands. On those same devices `killall -9` works
+# (the sandbox is not shielded there), so it always runs after `am` as a second
+# path: where `am` already recycled everything there is nothing left to match,
+# and where the sandbox denies SIGKILL it just fails quietly. Both stdout and
+# stderr go to /dev/null so the cmd failure line no longer leaks into the log.
 as_killpi() {
-    am force-stop com.android.vending 2>/dev/null
-    am kill com.google.android.gms 2>/dev/null
+    am force-stop com.android.vending >/dev/null 2>&1
+    am kill com.google.android.gms >/dev/null 2>&1
+    killall -9 com.google.android.gms.unstable com.android.vending com.android.vending:background com.android.vending:quick_launch >/dev/null 2>&1
     return 0
 }
 

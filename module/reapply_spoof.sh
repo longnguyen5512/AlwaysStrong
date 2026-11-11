@@ -36,7 +36,8 @@ fi
 if command -v as_killpi >/dev/null 2>&1; then
     as_killpi
 else
-    am force-stop com.android.vending 2>/dev/null
-    am kill com.google.android.gms 2>/dev/null
+    am force-stop com.android.vending >/dev/null 2>&1
+    am kill com.google.android.gms >/dev/null 2>&1
+    killall -9 com.google.android.gms.unstable com.android.vending com.android.vending:background com.android.vending:quick_launch >/dev/null 2>&1
 fi
 echo "OK"
