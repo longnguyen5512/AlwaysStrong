@@ -58,7 +58,7 @@ fi
 
 # stop anything that might be holding our lib files (upgrade-in-place). The
 # list is a superset across both engines — killing an absent process is a no-op.
-for proc in TEESimulator supervisor daemon ta-enhanced TrickyStoreOSS aswatcher; do
+for proc in TEESimulator supervisor daemon ta-enhanced TrickyStoreOSS; do
   for pid in $(pidof "$proc" 2>/dev/null); do kill -9 "$pid" 2>/dev/null; done
 done
 pkill -9 -f TEESimulator 2>/dev/null || true
