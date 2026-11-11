@@ -1,6 +1,6 @@
 # vendor/ — patched upstream artifacts
 
-## TEESimulator-RS-v6.1.0-318-Release.zip
+## TEESimulator-RS-v6.1.0-319-Release.zip
 
 A patched build of the TEE-Simulator-RS attestation engine that `build.sh` bundles
 by default for the `tee` engine (the stock release is no longer downloaded unless
@@ -27,22 +27,23 @@ upstream has not merged to main since 2026-07-11).
 | 5e81e09 | Keyboxes with a PKCS#8 private key (`BEGIN PRIVATE KEY`) are now accepted: the key used to be dropped, so generateKey failed with `-75 No usable attestation key in keybox.xml`. The public key is taken from the entry's attestation certificate. An empty keybox parse (missing file, read mid-write) is also no longer cached. |
 | 4ca8d6f, 05c3e28 | (from wfire06100/TEESimulator-RS 863c0b0, 99a97cf) RSA-OAEP MGF digest: deduplicated authorizations, SHA-1 default when the MGF digest is omitted, and the dedicated `UNSUPPORTED_MGF_DIGEST` / `INCOMPATIBLE_MGF_DIGEST` errors. |
 | 530cd18 | (from wfire06100/TEESimulator-RS a486fa8, code only) Crypto audit: correct KeyMint ErrorCode values (e.g. `INCOMPATIBLE_PURPOSE` -3, `TOO_MANY_OPERATIONS` -31), AES-GCM tag length and nonce validation, HMAC MAC length checks, unsupported digests rejected instead of silently replaced with SHA-256, synchronized and fsynced key persistence. |
+| bc9907d | An AIDL KeyMint `<hal>` without a `<version>` element now counts as version 1, like libvintf. It used to fall back to the SDK guess (200 on Android 13) while the device declared KeyMint v1 (100), which Duck Detector reports as a KeyMint VINTF mismatch (seen on a MediaTek mitee KeyMint). |
 
 Conflicts: `module/changelog.md` (two prepended entries, resolved as a union) and the `RSA_OAEP_MGF_DIGEST` block of `toAuthorizations()` (0cfad42 vs 863c0b0, resolved to the deduplicating 863c0b0 version).
-Net change vs upstream: 21 files, +494/-116.
+Net change vs upstream: 21 files, +499/-117.
 
 ### Corresponding source (GPL-3.0)
 
 TEESimulator-RS is GPL-3.0, so the exact source of the bundled binary ships with
 it. It is upstream `Enginex0/TEESimulator-RS` at commit `6d241e5` (tag
-`v6.0.1-307`) plus **`teesimulator-rs-v6.1.0-318.patch`** in this directory, the
-combined diff of the five PRs above plus the MGF digest, PKCS#8 keybox and crypto-audit fixes (21 files, +494/-116).
+`v6.0.1-307`) plus **`teesimulator-rs-v6.1.0-319.patch`** in this directory, the
+combined diff of the five PRs above plus the MGF digest, PKCS#8 keybox, crypto-audit and VINTF fixes (21 files, +499/-117).
 To get the full source the binary was built from:
 
 ```sh
 git clone --recursive https://github.com/Enginex0/TEESimulator-RS teesim
 cd teesim && git checkout 6d241e5
-git apply /path/to/vendor/teesimulator-rs-v6.1.0-318.patch
+git apply /path/to/vendor/teesimulator-rs-v6.1.0-319.patch
 ```
 
 Then build as below. The patch is the authoritative record; the PR list is for
