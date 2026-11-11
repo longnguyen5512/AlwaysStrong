@@ -460,20 +460,29 @@
   function defMode(pkg){ return (FORCED[pkg]||DETECTORS[pkg]===1)?"gen":"auto"; }
   var EXCLUDE={}; ["com.topjohnwu.magisk","io.github.vvb2060.magisk","io.github.huskydg.magisk","me.weishu.kernelsu","com.rifsxd.ksunext","com.sukisu.ultra","me.bmax.apatch","me.garfieldhan.apatch.next","org.lsposed.manager","com.termux","bin.mt.plus","bin.mt.plus.canary","xzr.konabess","io.github.a13e300.ksuwebui","moe.shizuku.privileged.api","com.dergoogler.mmrl","com.dergoogler.mmrl.wx","org.swiftapps.swiftbackup","com.google.android.apps.maps","com.google.android.apps.translate","com.google.android.apps.youtube.music","com.google.android.keep","com.google.android.youtube","com.google.earth","org.zwanoo.android.speedtest","com.android.chrome"].forEach(function(p){ EXCLUDE[p]=1; });
   var MAPF=AS+"/apps.map", PKGS=AS+"/packages";
-  var apps=[], labels={}, appMap={};
+  var apps=[], labels={}, appMap={}, pkgSet={}, pkgAdd=[];
+  // Auto targeting OFF: build_target_txt.sh then targets only the Google trio, the
+  // installed detectors, the packages file and apps given their own keybox, so the
+  // list must show exactly that, and ticking an app adds it to the packages file
+  // (a missing apps.map entry alone no longer means "targeted").
+  function autoOn(){ return atI?!!atI.checked:true; }
+  function baseTargeted(pkg){ return autoOn()||!!FORCED[pkg]||!!DETECTORS[pkg]||!!pkgSet[pkg]; }
+  // queue a package for the packages file; saveMap writes it before the rebuild
+  function ensurePkg(pkg){ if(FORCED[pkg]||pkgSet[pkg]) return; pkgSet[pkg]=1; pkgAdd.push(pkg); }
+  function loadPkgs(){ return ksuExec("cat "+shq(PKGS)+" 2>/dev/null").then(function(r){ pkgSet={}; (r.stdout||"").split("\n").forEach(function(l){ l=l.replace(/\s/g,""); if(l&&l.charAt(0)!=="#") pkgSet[l]=1; }); }); }
   // real app icon via the KSU-Next WebUI scheme ksu://icon/<pkg>: the manager serves it as a
   // 512px PNG, lazy-loaded by the browser and LRU-cached (no base64, no blocking), like
   // Tricky-Addon. On a manager without the scheme the image fails and onerror swaps in the
   // first-letter avatar.
   function avatarHtml(p){ var l=esc(avatarFor(p,labels[p]));
     return '<span class="appav" data-ltr="'+l+'"><img src="ksu://icon/'+encodeURIComponent(p)+'" alt="" loading="lazy" onerror="this.parentNode.textContent=this.parentNode.getAttribute(\'data-ltr\')"></span>'; }
-  function specOf(pkg){ var v=appMap[pkg]; if(v==="off") return {off:true}; if(!v) return {kb:"-",mode:defMode(pkg)}; var b=v.split("|"); return {kb:b[0]||"-",mode:b[1]||"auto"}; }
+  function specOf(pkg){ var v=appMap[pkg]; if(v==="off") return {off:true}; var s; if(!v) s={kb:"-",mode:defMode(pkg)}; else { var b=v.split("|"); s={kb:b[0]||"-",mode:b[1]||"auto"}; } if(s.kb==="-"&&!baseTargeted(pkg)) { s.off=true; } return s; }
   // No label (a host without getPackagesInfo, e.g. the a13e300 KSUWebUI): take the
   // letter from the app-specific LAST package segment, not the vendor segment, so
   // com.eltavine.duckdetector shows "D" (duckdetector) instead of "E" (eltavine).
   function avatarFor(pkg,lbl){ var src=lbl; if(!src){ var parts=String(pkg||"").split(".").filter(Boolean); src=parts.length?parts[parts.length-1]:pkg; } src=String(src).replace(/^[^A-Za-z0-9]+/,""); return (src.charAt(0)||"?").toUpperCase(); }
   function loadMap(){ return ksuExec("cat "+shq(MAPF)+" 2>/dev/null").then(function(r){ appMap={}; (r.stdout||"").split("\n").forEach(function(l){ if(!l) return; var i=l.indexOf("\t"); if(i<1) return; appMap[l.slice(0,i).trim()]=l.slice(i+1).trim(); }); }); }
-  function saveMap(){ var body=""; Object.keys(appMap).sort().forEach(function(p){ if(appMap[p]) body+=p+"\t"+appMap[p]+"\n"; }); deferBg("mkdir -p "+shq(AS)+" && printf %s "+shq(body)+" > "+shq(MAPF)+"; sh "+shq(MOD+"/build_target_txt.sh")+" "+shq(CFG+"/target.txt")); }
+  function saveMap(){ var body=""; Object.keys(appMap).sort().forEach(function(p){ if(appMap[p]) body+=p+"\t"+appMap[p]+"\n"; }); var add=""; pkgAdd.forEach(function(p){ add+=" && ( grep -qxF "+shq(p)+" "+shq(PKGS)+" 2>/dev/null || printf '%s\\n' "+shq(p)+" >> "+shq(PKGS)+" )"; }); pkgAdd=[]; deferBg("mkdir -p "+shq(AS)+add+" && printf %s "+shq(body)+" > "+shq(MAPF)+"; sh "+shq(MOD+"/build_target_txt.sh")+" "+shq(CFG+"/target.txt")); }
   function loadApps(){ return ksuExec("{ pm list packages -3; echo com.google.android.gms; echo com.google.android.gsf; echo com.android.vending; cat "+shq(PKGS)+" 2>/dev/null; } 2>/dev/null | sed 's/^package://' | sort -u").then(function(r){ apps=(r.stdout||"").split("\n").map(function(s){ return s.trim(); }).filter(Boolean); labels={};
     try{ if(typeof ksu!=="undefined"&&ksu.getPackagesInfo){ var info=JSON.parse(ksu.getPackagesInfo(JSON.stringify(apps))); (info||[]).forEach(function(x){ if(x&&x.packageName) labels[x.packageName]=x.appLabel||""; }); } }catch(e){}
     }); }
@@ -495,8 +504,8 @@
     appsList.innerHTML='<div class="card">'+html+'</div>';
   }
   function appsOpen(){ openM(appsModal); if(appq) appq.value=""; if(appsList) appsList.innerHTML='<div class="card"><div class="empty" style="display:block">…</div></div>';
-    Promise.all([loadMap(),loadApps()]).then(function(){ renderApps(); }); }
-  function toggleTick(pkg){ if(appMap[pkg]==="off") delete appMap[pkg]; else appMap[pkg]="off"; renderApps(); saveMap(); }
+    Promise.all([loadMap(),loadApps(),loadPkgs()]).then(function(){ renderApps(); }); }
+  function toggleTick(pkg){ if(!specOf(pkg).off){ appMap[pkg]="off"; } else { if(appMap[pkg]==="off") delete appMap[pkg]; if(!autoOn()) ensurePkg(pkg); } renderApps(); saveMap(); }
   function addCustomPkg(pkg){ pkg=(pkg||"").trim(); if(!isPkg(pkg)){ toast(tr("pak_add_bad","Enter a valid package name"),3000); return; }
     ksuExec("mkdir -p "+shq(AS)+" && ( grep -qxF "+shq(pkg)+" "+shq(PKGS)+" 2>/dev/null || printf '%s\\n' "+shq(pkg)+" >> "+shq(PKGS)+" )");
     if(!apps.some(function(p){ return p.toLowerCase()===pkg.toLowerCase(); })){ apps.push(pkg); apps.sort(); }
@@ -520,7 +529,7 @@
   document.addEventListener("click",function(e){ if(menu&&!menu.hidden&&!e.target.closest("#appsMenu")&&!e.target.closest("#kebab")) menu.hidden=true; });
   if(menu) qa("button",menu).forEach(function(b){ b.addEventListener("click",function(){ menu.hidden=true; var m=b.dataset.m;
     if(m==="patch"){ openM(patchModal); }
-    else if(m==="all"){ apps.forEach(function(p){ if(appMap[p]==="off") delete appMap[p]; }); renderApps(); saveMap(); toast(tr("pak_selall_done","All apps selected"),2000); }
+    else if(m==="all"){ apps.forEach(function(p){ if(appMap[p]==="off") delete appMap[p]; if(!autoOn()) ensurePkg(p); }); renderApps(); saveMap(); toast(tr("pak_selall_done","All apps selected"),2000); }
     else if(m==="unnec"){ var n=0; apps.forEach(function(p){ if(EXCLUDE[p]&&!FORCED[p]&&appMap[p]!=="off"){ appMap[p]="off"; n++; } }); renderApps(); saveMap(); toast(tr("pak_unnec_done","Deselected unnecessary")+(n?" ("+n+")":""),2500); }
     else if(m==="add"){ if(pkgInput) pkgInput.value=""; openM(pkgModal); setTimeout(function(){ if(pkgInput) pkgInput.focus(); },80); }
   }); });
@@ -536,7 +545,7 @@
   if(cfgModes) qa(".appitem",cfgModes).forEach(function(x){ x.addEventListener("click",function(){ cfgSetMode(x.dataset.m); }); });
   document.getElementById("cfgClose").addEventListener("click",function(){ closeM(cfgModal); });
   cfgModal.addEventListener("click",function(e){ if(e.target===cfgModal) closeM(cfgModal); });
-  document.getElementById("cfgApply").addEventListener("click",function(){ var spec=(cfgKb==="-"&&cfgMode===defMode(cfgPkg))?null:(cfgKb+"|"+cfgMode); if(spec) appMap[cfgPkg]=spec; else delete appMap[cfgPkg]; closeM(cfgModal); renderApps(); saveMap(); });
+  document.getElementById("cfgApply").addEventListener("click",function(){ var spec=(cfgKb==="-"&&cfgMode===defMode(cfgPkg))?null:(cfgKb+"|"+cfgMode); if(spec) appMap[cfgPkg]=spec; else delete appMap[cfgPkg]; if(!autoOn()&&cfgKb==="-") ensurePkg(cfgPkg); closeM(cfgModal); renderApps(); saveMap(); });
   document.getElementById("cfgKbRow").addEventListener("click",function(){ openKbp(); });
 
   // ---- keybox picker (within per-app config) ----
