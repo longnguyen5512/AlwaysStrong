@@ -23,7 +23,14 @@ esac
 VERSION=$(grep_prop version "${TMPDIR}/module.prop")
 # read the name from module.prop so the -inject build shows "[inject]" here too
 NAME=$(grep_prop name "${TMPDIR}/module.prop")
-install_file() { unzip -qqjo "$ZIPFILE" "$1" -d "$2" || abort "extract failed: $1"; }
+# rm -f first: busybox unzip opens an existing target with O_TRUNC, and that fails
+# with ETXTBSY ("Text file busy") when the file is a binary still running from an
+# in-place upgrade. Unlinking a running binary is allowed (the process keeps its
+# old inode), so the fresh copy then lands as a new file.
+install_file() {
+  rm -f "$2/${1##*/}" 2>/dev/null
+  unzip -qqjo "$ZIPFILE" "$1" -d "$2" || abort "extract failed: $1"
+}
 
 ui_print "${NAME:-AlwaysStrong} $VERSION"
 ui_print "by @evokerr  -  t.me/keyboxstrong"
@@ -51,7 +58,7 @@ fi
 
 # stop anything that might be holding our lib files (upgrade-in-place). The
 # list is a superset across both engines — killing an absent process is a no-op.
-for proc in TEESimulator supervisor daemon ta-enhanced TrickyStoreOSS; do
+for proc in TEESimulator supervisor daemon ta-enhanced TrickyStoreOSS aswatcher; do
   for pid in $(pidof "$proc" 2>/dev/null); do kill -9 "$pid" 2>/dev/null; done
 done
 pkill -9 -f TEESimulator 2>/dev/null || true
@@ -188,6 +195,10 @@ fi
 # --- aswatcher native binary (inotify target.txt + Xposed exclude + conflict)
 mkdir -p "$MODPATH/bin/$ABI_DIR"
 if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "bin/$ABI_DIR/aswatcher"; then
+  # aswatcher is running from the old install during an upgrade; overwriting it
+  # in place failed with ETXTBSY ("extract failed: bin/.../aswatcher"). Unlink
+  # first, see install_file.
+  rm -f "$MODPATH/bin/$ABI_DIR/aswatcher" 2>/dev/null
   unzip -qqo "$ZIPFILE" "bin/$ABI_DIR/aswatcher" -d "$MODPATH" \
     || abort "extract failed: bin/$ABI_DIR/aswatcher"
   chmod 755 "$MODPATH/bin/$ABI_DIR/aswatcher"
@@ -197,6 +208,7 @@ fi
 
 # --- asfetch native HTTPS fetcher (arm devices only; TLS fallback for CDNs)
 if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "bin/$ABI_DIR/asfetch"; then
+  rm -f "$MODPATH/bin/$ABI_DIR/asfetch" 2>/dev/null
   unzip -qqo "$ZIPFILE" "bin/$ABI_DIR/asfetch" -d "$MODPATH" \
     || abort "extract failed: bin/$ABI_DIR/asfetch"
   chmod 755 "$MODPATH/bin/$ABI_DIR/asfetch"
