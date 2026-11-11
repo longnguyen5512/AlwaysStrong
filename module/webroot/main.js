@@ -450,11 +450,14 @@
   var appsList=document.getElementById("appsList");
   var appq=document.getElementById("appq");
   var FORCED={"com.android.vending":1,"com.google.android.gms":1,"com.google.android.gsf":1};
-  // Known Play Integrity / root / attestation detector apps. They default to
-  // generate mode ("!") like the Google trio (they probe the keybox chain
-  // directly) and stay targeted whenever installed. A name that is not installed
-  // is inert. Keep in sync with build_target_txt.sh DETECTORS_LIST.
-  var DETECTORS={"com.eltavine.duckdetector":1,"gr.nikolasspyr.integritycheck":1,"com.henrikherzig.playintegritychecker":1,"rikka.safetynetchecker":1,"icu.nullptr.nativetest":1,"io.github.vvb2060.keyattestation":1,"com.anu.developers3k.rootchecker":1,"com.joeykrim.rootcheck":1,"com.scottyab.rootbeer.sample":1};
+  // Known Play Integrity / root / attestation detector apps. They stay targeted
+  // whenever installed (a name that is not installed is inert). The value is the
+  // default mode: 1 = generate ("!") like the Google trio, since they probe the
+  // keybox chain directly; "auto" = no suffix (Duck Detector flags the generated
+  // chain). Keep in sync with build_target_txt.sh DETECTORS_LIST / DETECTORS_AUTO.
+  var DETECTORS={"com.eltavine.duckdetector":"auto","gr.nikolasspyr.integritycheck":1,"com.henrikherzig.playintegritychecker":1,"rikka.safetynetchecker":1,"icu.nullptr.nativetest":1,"io.github.vvb2060.keyattestation":1,"com.anu.developers3k.rootchecker":1,"com.joeykrim.rootcheck":1,"com.scottyab.rootbeer.sample":1};
+  // The mode an app has with no apps.map entry (must match build_target_txt.sh).
+  function defMode(pkg){ return (FORCED[pkg]||DETECTORS[pkg]===1)?"gen":"auto"; }
   var EXCLUDE={}; ["com.topjohnwu.magisk","io.github.vvb2060.magisk","io.github.huskydg.magisk","me.weishu.kernelsu","com.rifsxd.ksunext","com.sukisu.ultra","me.bmax.apatch","me.garfieldhan.apatch.next","org.lsposed.manager","com.termux","bin.mt.plus","bin.mt.plus.canary","xzr.konabess","io.github.a13e300.ksuwebui","moe.shizuku.privileged.api","com.dergoogler.mmrl","com.dergoogler.mmrl.wx","org.swiftapps.swiftbackup","com.google.android.apps.maps","com.google.android.apps.translate","com.google.android.apps.youtube.music","com.google.android.keep","com.google.android.youtube","com.google.earth","org.zwanoo.android.speedtest","com.android.chrome"].forEach(function(p){ EXCLUDE[p]=1; });
   var MAPF=AS+"/apps.map", PKGS=AS+"/packages";
   var apps=[], labels={}, appMap={};
@@ -464,7 +467,7 @@
   // first-letter avatar.
   function avatarHtml(p){ var l=esc(avatarFor(p,labels[p]));
     return '<span class="appav" data-ltr="'+l+'"><img src="ksu://icon/'+encodeURIComponent(p)+'" alt="" loading="lazy" onerror="this.parentNode.textContent=this.parentNode.getAttribute(\'data-ltr\')"></span>'; }
-  function specOf(pkg){ var v=appMap[pkg]; if(v==="off") return {off:true}; if(!v) return {kb:"-",mode:(FORCED[pkg]||DETECTORS[pkg])?"gen":"auto"}; var b=v.split("|"); return {kb:b[0]||"-",mode:b[1]||"auto"}; }
+  function specOf(pkg){ var v=appMap[pkg]; if(v==="off") return {off:true}; if(!v) return {kb:"-",mode:defMode(pkg)}; var b=v.split("|"); return {kb:b[0]||"-",mode:b[1]||"auto"}; }
   // No label (a host without getPackagesInfo, e.g. the a13e300 KSUWebUI): take the
   // letter from the app-specific LAST package segment, not the vendor segment, so
   // com.eltavine.duckdetector shows "D" (duckdetector) instead of "E" (eltavine).
@@ -533,7 +536,7 @@
   if(cfgModes) qa(".appitem",cfgModes).forEach(function(x){ x.addEventListener("click",function(){ cfgSetMode(x.dataset.m); }); });
   document.getElementById("cfgClose").addEventListener("click",function(){ closeM(cfgModal); });
   cfgModal.addEventListener("click",function(e){ if(e.target===cfgModal) closeM(cfgModal); });
-  document.getElementById("cfgApply").addEventListener("click",function(){ var spec=(cfgKb==="-"&&cfgMode==="auto")?null:(cfgKb+"|"+cfgMode); if(spec) appMap[cfgPkg]=spec; else delete appMap[cfgPkg]; closeM(cfgModal); renderApps(); saveMap(); });
+  document.getElementById("cfgApply").addEventListener("click",function(){ var spec=(cfgKb==="-"&&cfgMode===defMode(cfgPkg))?null:(cfgKb+"|"+cfgMode); if(spec) appMap[cfgPkg]=spec; else delete appMap[cfgPkg]; closeM(cfgModal); renderApps(); saveMap(); });
   document.getElementById("cfgKbRow").addEventListener("click",function(){ openKbp(); });
 
   // ---- keybox picker (within per-app config) ----

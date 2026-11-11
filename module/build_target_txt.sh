@@ -55,10 +55,12 @@ com.google.android.gms
 com.google.android.gsf
 "
 
-# Known Play Integrity / root / attestation detector apps. Targeted in generate
-# mode ("!") by default like the Google trio (they probe the keybox chain
-# directly), and included whenever installed even with Auto targeting off. A name
-# that is not installed is simply skipped. Keep in sync with main.js DETECTORS.
+# Known Play Integrity / root / attestation detector apps, included whenever
+# installed even with Auto targeting off. A name that is not installed is simply
+# skipped. They default to generate mode ("!") like the Google trio (they probe
+# the keybox chain directly), except the ones in DETECTORS_AUTO, which default to
+# auto (no suffix): Duck Detector flags the generated chain. Keep in sync with
+# main.js DETECTORS.
 DETECTORS_LIST="
 com.eltavine.duckdetector
 gr.nikolasspyr.integritycheck
@@ -69,6 +71,9 @@ io.github.vvb2060.keyattestation
 com.anu.developers3k.rootchecker
 com.joeykrim.rootcheck
 com.scottyab.rootbeer.sample
+"
+DETECTORS_AUTO="
+com.eltavine.duckdetector
 "
 
 is_installed() { printf '%s\n' "$ALL" | grep -Fxq "$1"; }
@@ -126,9 +131,14 @@ DEF=$(build_default | sort -u)
 #   (no line)             -> ticked, default keybox, auto; forced trio -> gen.
 MAP="$AS_APPS"
 [ -f "$MAP" ] || MAP=""
-# The forced-generate set: the Google trio plus the detector apps, so both awk
-# passes below give them the "!" (generate) suffix by default.
-FORCED="com.android.vending com.google.android.gms com.google.android.gsf $(echo $DETECTORS_LIST)"
+# The forced-generate set: the Google trio plus the detector apps (minus
+# DETECTORS_AUTO), so both awk passes below give them the "!" (generate) suffix
+# by default. An explicit apps.map mode always wins over this default.
+_gen_det=""
+for p in $DETECTORS_LIST; do
+    case " $(echo $DETECTORS_AUTO) " in *" $p "*) ;; *) _gen_det="$_gen_det $p" ;; esac
+done
+FORCED="com.android.vending com.google.android.gms com.google.android.gsf$_gen_det"
 
 {
     # --- default-keybox section (kb == "-"): plain list + per-app ! suffix ---
