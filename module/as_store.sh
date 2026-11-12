@@ -100,7 +100,7 @@ as_killpi() {
 }
 
 # Every setting there is, in the order the config file lists them.
-AS_KEYS="auto_fp auto_keybox status_indicator rom_spoof_block spoof_patch_props
+AS_KEYS="auto_fp auto_keybox status_indicator status_notify rom_spoof_block spoof_patch_props
          force_patch_props logcat_cleanup prop_unify denylist_gms auto_target hide_rom_markers
          custom_keybox custom_pif patch_system patch_vendor patch_boot interval_sec"
 
@@ -113,7 +113,7 @@ AS_KEYS="auto_fp auto_keybox status_indicator rom_spoof_block spoof_patch_props
 as_default() {
     case "$1" in
         auto_fp|auto_keybox|status_indicator|rom_spoof_block|logcat_cleanup|prop_unify|denylist_gms|auto_target) echo 1 ;;
-        custom_keybox|custom_pif|spoof_patch_props|force_patch_props|hide_rom_markers) echo 0 ;;
+        custom_keybox|custom_pif|spoof_patch_props|force_patch_props|hide_rom_markers|status_notify) echo 0 ;;
         interval_sec) echo 3600 ;;
         *) echo "" ;;
     esac

@@ -48,7 +48,7 @@ fi
 # Auto path + user opted out of indicator → exit without touching module.prop.
 # Hourly fp/keybox checks still happen in service.sh; only the visible 🟢
 # prefix is gated. Manual action presses always update regardless.
-if [ "$MODE" != "manual" ] && ! as_on status_indicator; then
+if [ "$MODE" != "manual" ] && ! as_on status_indicator && ! as_on status_notify; then
     exit 0
 fi
 
@@ -109,23 +109,61 @@ get_status() {
     return 1
 }
 
+# --- optional status notification (opt-in: status_notify, default off) -------
+# Post one self-replacing notification with the current integrity level whenever
+# the server status CHANGES (hourly auto) or on every Action (manual). Off unless
+# the WebUI Advanced toggle turns it on, and hourly is the only timer (no extra
+# polling). MUST be posted as the Shell user (uid 2000): a notification posted by
+# root for com.android.shell is accepted by the command but silently never shown.
+_nq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+status_notify() {   # $1 = status string (emoji dots, already validated)
+    as_on status_notify || return 0
+    command -v cmd >/dev/null 2>&1 || return 0
+    _s="$1"
+    _last=$(st_get status_notify_last 2>/dev/null)
+    st_set status_notify_last "$_s"
+    # auto (hourly): only when it changed; manual (Action press): always show
+    [ "$MODE" = "manual" ] || [ "$_s" != "$_last" ] || return 0
+    _n=$(printf '%s' "$_s" | sed 's/🟢/G/g' | tr -cd 'G' | wc -c | tr -d ' ')
+    case "$_n" in
+        3) _lv="STRONG" ;;
+        2) _lv="DEVICE" ;;
+        1) _lv="BASIC" ;;
+        *) _lv="CHANGE KEY" ;;
+    esac
+    _title="$_s  $_lv"
+    _text="AlwaysStrong · $(date '+%H:%M')"
+    # fixed tag "as_status" => each post replaces the previous one
+    su 2000 -c "cmd notification post -S bigtext -t $(_nq "$_title") as_status $(_nq "$_text")" \
+        >/dev/null 2>&1
+}
+
 new=$(get_status)
 [ -z "$new" ] && exit 3
 # A captive portal / hotel Wi-Fi answers every URL with an HTML login page. That
 # is not a status — never stamp it into module.prop.
 case "$new" in *'<'*|*'>'*|*'{'*) exit 3 ;; esac
 
+# only a short emoji status is a real answer; skip notifying on anything else
+case "$new" in *🟢*|*🔴*|*🟡*|*🟠*) status_notify "$new" ;; esac
+
 base=$(head -1 "$BASE_FILE" | tr -d '\r\n')
 [ -z "$base" ] && exit 4
 
-want="description=${new} ${base}"
-have=$(grep -m1 '^description=' "$PROP")
+# Write the visible 🟢 prefix into module.prop only when the indicator is on
+# (a manual Action press always writes, as before). When the user runs with the
+# indicator off but status_notify on, we fetched purely to drive the notification
+# above and must NOT re-stamp the prefix the user chose to hide.
+if [ "$MODE" = "manual" ] || as_on status_indicator; then
+    want="description=${new} ${base}"
+    have=$(grep -m1 '^description=' "$PROP")
 
-[ "$have" = "$want" ] && exit 0
+    [ "$have" = "$want" ] && exit 0
 
-# Atomic rewrite: produce full file in tmp, swap in.
-tmp="${PROP}.tmp"
-awk -v new="$want" '
-    !done && /^description=/ { print new; done=1; next }
-    { print }
-' "$PROP" > "$tmp" && mv -f "$tmp" "$PROP"
+    # Atomic rewrite: produce full file in tmp, swap in.
+    tmp="${PROP}.tmp"
+    awk -v new="$want" '
+        !done && /^description=/ { print new; done=1; next }
+        { print }
+    ' "$PROP" > "$tmp" && mv -f "$tmp" "$PROP"
+fi

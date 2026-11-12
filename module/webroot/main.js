@@ -62,7 +62,7 @@
   document.addEventListener("visibilitychange",function(){ if(document.hidden) flushNow(); });
   window.addEventListener("pagehide",flushNow);
 
-  var DEFAULTS={auto_fp:"1",auto_keybox:"1",status_indicator:"1",rom_spoof_block:"1",
+  var DEFAULTS={auto_fp:"1",auto_keybox:"1",status_indicator:"1",status_notify:"0",rom_spoof_block:"1",
     spoof_patch_props:"0",custom_keybox:"0",custom_pif:"0",interval_sec:"3600",hide_rom_markers:"0",auto_target:"1"};
   function conf(S,k){ return (S[k]!==undefined&&S[k]!=="")?S[k]:DEFAULTS[k]; }
 
@@ -158,6 +158,7 @@
     setToggle("fingerprint pixel refresh", !pifCustom && conf(S,"auto_fp")==="1");
     setToggle("keybox auto check", conf(S,"auto_keybox")==="1");
     setToggle("status indicator prefix", conf(S,"status_indicator")==="1");
+    setToggle("status notification", conf(S,"status_notify")==="1");
     // Keybox
     var ckSw=document.getElementById("ckSw"); if(ckSw){ ckSw.checked=conf(S,"custom_keybox")==="1"; var cp=document.getElementById("ckPick"); if(cp) cp.classList.toggle("reveal",ckSw.checked); }
     // keybox file row label
@@ -248,6 +249,14 @@
     settingOn("status_indicator",e.target.checked);
     if(!e.target.checked){ deferBg('sh "'+MOD+'/status_fetch.sh" strip'); setTimeout(function(){ refreshStatus(); },1500); }
     else { toast(tr("ind_fetch","Fetching status…"),3000); deferBg('sh "'+MOD+'/status_fetch.sh" manual'); setTimeout(function(){ refreshStatus(); },4000); }
+  });
+  var snI=dkInput("status notification");
+  if(snI) snI.addEventListener("change",function(e){
+    settingOn("status_notify",e.target.checked);
+    // hourly is enough (and Action): no forced fetch here, which would re-stamp
+    // the module.prop prefix when the indicator is off. The next check posts it.
+    toast(e.target.checked?tr("notif_on","Status notifications on · shows on each check")
+                          :tr("notif_off","Status notifications off"), 2600);
   });
   // Keybox
   var ckSwEl=document.getElementById("ckSw");
