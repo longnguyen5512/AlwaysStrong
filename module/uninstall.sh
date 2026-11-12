@@ -42,7 +42,15 @@ BK_SECURE="$CONFIG_DIR/alwaysstrong/rom_secure_backup"
 if [ -d "$BK_SECURE" ] && command -v settings >/dev/null 2>&1; then
     for f in "$BK_SECURE"/*; do
         [ -f "$f" ] || continue
-        settings put secure "$(basename "$f")" "$(cat "$f")" 2>/dev/null
+        _k="$(basename "$f")"
+        _v="$(cat "$f")"
+        # "__ABSENT__" marks a key we forced OFF (spoof_pif_enabled) that the ROM
+        # had left unset: restore = delete it so the ROM's own default returns.
+        if [ "$_v" = "__ABSENT__" ]; then
+            settings delete secure "$_k" 2>/dev/null
+        else
+            settings put secure "$_k" "$_v" 2>/dev/null
+        fi
     done
 fi
 

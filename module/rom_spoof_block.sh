@@ -55,9 +55,40 @@ done
 if [ "$MODE" = "settings" ]; then
     command -v settings >/dev/null 2>&1 || exit 0
     BKDIR="$CONFIG_DIR/alwaysstrong/rom_secure_backup"
-    for k in spoof_pif_config spoof_pif_vending spoof_pif_photos spoof_pif_netflix \
+
+    # MASTER KILL SWITCH (Infinity-X "mid-2026" A16 schema): spoof_pif_enabled gates
+    # the whole PlayIntegritySpoofService. Two traps make a plain delete wrong here:
+    #   1. Its default when the key is ABSENT is !isPixelDevice, i.e. ENABLED on our
+    #      non-Pixel users -- so deleting it re-enables the spoof.
+    #   2. The Play Store spoof is NOT a key of its own: it is the spoofVendingBuild
+    #      field INSIDE spoof_pif_config and defaults to TRUE. Merely deleting
+    #      spoof_pif_config makes this schema fall back to a hardcoded Pixel profile
+    #      that STILL spoofs Play Store (the "Play Store spoof survives reboot" bug).
+    # So force it OFF with a SET, which also neutralizes the default-profile fallback.
+    # Unwatched no-op on the A17 schema (no such key there; that path is handled by
+    # clearing spoof_pif_config below). Back up the prior value -- "__ABSENT__" when
+    # the key was unset -- so uninstall.sh restores the ROM's own state exactly.
+    _pe=$(settings get secure spoof_pif_enabled 2>/dev/null)
+    case "$_pe" in
+        0) : ;;   # already disabled: nothing to change or back up
+        *)
+            mkdir -p "$BKDIR" 2>/dev/null
+            if [ ! -f "$BKDIR/spoof_pif_enabled" ]; then
+                case "$_pe" in ''|null) printf '%s' "__ABSENT__" ;; *) printf '%s' "$_pe" ;; esac \
+                    > "$BKDIR/spoof_pif_enabled"
+            fi
+            settings put secure spoof_pif_enabled 0 2>/dev/null ;;
+    esac
+
+    # Clear the ROM's spoof config blobs (REAL keys only). On the A17 schema an empty
+    # spoof_pif_config sets mConfigLoaded=false and the spoof stops; on A16 the enable
+    # switch above already neutralized it. spoof_pif_vending and keybox_data were never
+    # real Settings keys (the Play Store spoof is the in-blob spoofVendingBuild field;
+    # the keybox is spoof_trickystore_keybox) and have been dropped. Back up each
+    # non-empty value once so uninstall.sh can restore it.
+    for k in spoof_pif_config spoof_pif_photos spoof_pif_netflix \
              spoof_pif_snapchat spoof_gameprops_config spoof_trickystore_target \
-             spoof_trickystore_keybox spoof_trickystore_patch keybox_data; do
+             spoof_trickystore_keybox spoof_trickystore_patch; do
         v=$(settings get secure "$k" 2>/dev/null)
         [ "$v" = "null" ] && v=""
         [ -n "$v" ] || continue
