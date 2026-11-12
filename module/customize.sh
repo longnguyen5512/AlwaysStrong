@@ -32,6 +32,27 @@ install_file() {
   unzip -qqjo "$ZIPFILE" "$1" -d "$2" || abort "extract failed: $1"
 }
 
+# busybox "mkdir -p /abs/path" walks the path from the root and issues mkdir("/")
+# as its first step. On a healthy system that returns EEXIST and is ignored; inside
+# a broken KernelSU-Next install sandbox (no /dev/tmp, chcon on /dev/tmp failing)
+# the very same call returns EINVAL, which busybox treats as fatal -- so mkdir -p
+# aborts and the directory is never created. That is the "mkdir: can't create
+# directory '/': Invalid argument" + missing bin/<abi> install failure. Create each
+# component with a plain mkdir instead: a single mkdir() on the full path that never
+# touches "/", skipping levels that already exist. Returns ok only if the dir ends
+# up present.
+mkdirp() {
+  case "$1" in /*) _acc="" ;; *) _acc="." ;; esac
+  oIFS="$IFS"; IFS=/
+  for _seg in $1; do
+    [ -n "$_seg" ] || continue
+    _acc="$_acc/$_seg"
+    [ -d "$_acc" ] || mkdir "$_acc" 2>/dev/null
+  done
+  IFS="$oIFS"
+  [ -d "$1" ]
+}
+
 ui_print "${NAME:-AlwaysStrong} $VERSION"
 ui_print "by @evokerr  -  t.me/keyboxstrong"
 ui_print ""
@@ -160,7 +181,7 @@ if [ "$ENGINE" = "none" ]; then
   ui_print "PIF-less build — hardware attestation + keybox only"
   ui_print "no Play Integrity fingerprint spoof in this build"
 else
-mkdir -p "$MODPATH/zygisk"
+mkdirp "$MODPATH/zygisk"
 ZN=0
 for z in arm64-v8a armeabi-v7a x86 x86_64; do
   if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "zygisk/$z.so"; then
@@ -193,32 +214,43 @@ fi
 fi
 
 # --- aswatcher native binary (inotify target.txt + Xposed exclude + conflict)
-mkdir -p "$MODPATH/bin/$ABI_DIR"
-if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "bin/$ABI_DIR/aswatcher"; then
+# aswatcher and asfetch are HELPERS, not the attestation core: the live target.txt
+# watcher and the TLS keybox-fetch fallback. service.sh rebuilds target.txt on every
+# boot and [Action] rebuilds it too, so a missing watcher only costs live reactivity.
+# When the bin dir can't be made (a broken KSU-Next sandbox where even a plain mkdir
+# fails) or the extract fails, warn and go on instead of aborting the whole install —
+# the TEE engine above is already in place and the module boots.
+if mkdirp "$MODPATH/bin/$ABI_DIR" \
+   && unzip -l "$ZIPFILE" 2>/dev/null | grep -q "bin/$ABI_DIR/aswatcher"; then
   # aswatcher is running from the old install during an upgrade; overwriting it
   # in place failed with ETXTBSY ("extract failed: bin/.../aswatcher"). Unlink
   # first, see install_file.
   rm -f "$MODPATH/bin/$ABI_DIR/aswatcher" 2>/dev/null
-  unzip -qqo "$ZIPFILE" "bin/$ABI_DIR/aswatcher" -d "$MODPATH" \
-    || abort "extract failed: bin/$ABI_DIR/aswatcher"
-  chmod 755 "$MODPATH/bin/$ABI_DIR/aswatcher"
+  if unzip -qqo "$ZIPFILE" "bin/$ABI_DIR/aswatcher" -d "$MODPATH"; then
+    chmod 755 "$MODPATH/bin/$ABI_DIR/aswatcher"
+  else
+    ui_print "⚠️ aswatcher extract failed — live target watcher off (core unaffected)"
+  fi
 else
   ui_print "warning: no aswatcher binary for $ABI_DIR"
 fi
 
 # --- asfetch native HTTPS fetcher (arm devices only; TLS fallback for CDNs)
-if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "bin/$ABI_DIR/asfetch"; then
+if [ -d "$MODPATH/bin/$ABI_DIR" ] \
+   && unzip -l "$ZIPFILE" 2>/dev/null | grep -q "bin/$ABI_DIR/asfetch"; then
   rm -f "$MODPATH/bin/$ABI_DIR/asfetch" 2>/dev/null
-  unzip -qqo "$ZIPFILE" "bin/$ABI_DIR/asfetch" -d "$MODPATH" \
-    || abort "extract failed: bin/$ABI_DIR/asfetch"
-  chmod 755 "$MODPATH/bin/$ABI_DIR/asfetch"
+  if unzip -qqo "$ZIPFILE" "bin/$ABI_DIR/asfetch" -d "$MODPATH"; then
+    chmod 755 "$MODPATH/bin/$ABI_DIR/asfetch"
+  else
+    ui_print "⚠️ asfetch extract failed — HTTPS fetch fallback off (core unaffected)"
+  fi
 fi
 
 chmod 755 "$MODPATH/daemon" "$MODPATH/supervisor" "$MODPATH/inject" \
           "$MODPATH"/*.sh 2>/dev/null
 
 # --- WebUI (KSU / APatch / MMRL)
-mkdir -p "$MODPATH/webroot"
+mkdirp "$MODPATH/webroot"
 if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "webroot/index.html"; then
   unzip -qqo "$ZIPFILE" "webroot/index.html" -d "$MODPATH" \
     || abort "extract failed: webroot/index.html"
@@ -235,7 +267,7 @@ else
 fi
 
 # --- /data/adb/tricky_store config ----------------------------------------
-mkdir -p "$CONFIG_DIR"
+mkdirp "$CONFIG_DIR"
 
 # Everything of OURS (settings, state, logs) goes under one directory there;
 # import it now so an upgrade from the old one-file-per-toggle layout keeps
