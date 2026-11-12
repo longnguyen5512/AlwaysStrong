@@ -1,5 +1,14 @@
 # AlwaysStrong changelog
 
+## v1.0.6.1
+
+**New**
+- **Status notification (opt-in, Advanced > Automatic, default off).** When on, AlwaysStrong posts one notification with the current integrity level (STRONG / DEVICE / BASIC / CHANGE KEY) after each hourly check and on every Action. It updates the same notification in place instead of stacking new ones, and only re-posts when the level actually changes, so it never spams. Posting it from the shell user keeps it visible on every root manager.
+
+**Fixes**
+- **Install no longer fails on some KernelSU-Next setups.** On a device whose root manager could not create its temp dir (the install log shows "/dev/tmp: No such file or directory"), busybox "mkdir -p" aborted on the root path and the install died with "extract failed". Module subdirectories are now created without that pitfall, and the optional helper binaries (aswatcher, asfetch) warn instead of aborting when they cannot be extracted, so the attestation core still installs.
+- **"Block ROM spoof" now also stops Infinity-X's Play Store spoof.** On ProjectInfinity-X's Android 16 scheme, the Play Store kept being spoofed after a reboot because the ROM's real master switch (spoof_pif_enabled) was never turned off. It is now set correctly, verified against the ROM source.
+
 ## v1.0.6
 
 **New**
