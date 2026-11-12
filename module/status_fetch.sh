@@ -21,6 +21,9 @@ CAP=45
 
 # mode: "manual" (action button — always writes module.prop)
 #       "auto"   (service.sh hourly — skips the write when status_indicator=0)
+#       "notify" (WebUI status-notification toggle ON — fetch and post ONE
+#                 notification immediately, never writing the module.prop prefix,
+#                 so it works even with the indicator off)
 #       "strip"  (WebUI indicator OFF — rewrite description to base, no fetch)
 MODE="${1:-auto}"
 
@@ -48,7 +51,7 @@ fi
 # Auto path + user opted out of indicator → exit without touching module.prop.
 # Hourly fp/keybox checks still happen in service.sh; only the visible 🟢
 # prefix is gated. Manual action presses always update regardless.
-if [ "$MODE" != "manual" ] && ! as_on status_indicator && ! as_on status_notify; then
+if [ "$MODE" != "manual" ] && [ "$MODE" != "notify" ] && ! as_on status_indicator && ! as_on status_notify; then
     exit 0
 fi
 
@@ -117,13 +120,15 @@ get_status() {
 # root for com.android.shell is accepted by the command but silently never shown.
 _nq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 status_notify() {   # $1 = status string (emoji dots, already validated)
-    as_on status_notify || return 0
+    # "notify" is the explicit WebUI toggle-on trigger: post regardless of the
+    # stored flag (which may not have been flushed yet when this fires).
+    [ "$MODE" = "notify" ] || as_on status_notify || return 0
     command -v cmd >/dev/null 2>&1 || return 0
     _s="$1"
     _last=$(st_get status_notify_last 2>/dev/null)
     st_set status_notify_last "$_s"
-    # auto (hourly): only when it changed; manual (Action press): always show
-    [ "$MODE" = "manual" ] || [ "$_s" != "$_last" ] || return 0
+    # auto (hourly): only when it changed; manual (Action) / notify (toggle): always
+    [ "$MODE" = "manual" ] || [ "$MODE" = "notify" ] || [ "$_s" != "$_last" ] || return 0
     _n=$(printf '%s' "$_s" | sed 's/🟢/G/g' | tr -cd 'G' | wc -c | tr -d ' ')
     case "$_n" in
         3) _lv="STRONG" ;;
@@ -151,10 +156,10 @@ base=$(head -1 "$BASE_FILE" | tr -d '\r\n')
 [ -z "$base" ] && exit 4
 
 # Write the visible 🟢 prefix into module.prop only when the indicator is on
-# (a manual Action press always writes, as before). When the user runs with the
-# indicator off but status_notify on, we fetched purely to drive the notification
-# above and must NOT re-stamp the prefix the user chose to hide.
-if [ "$MODE" = "manual" ] || as_on status_indicator; then
+# (a manual Action press always writes, as before). The "notify" mode never
+# writes, and the auto path with the indicator off fetched purely to drive the
+# notification above, so neither re-stamps the prefix the user chose to hide.
+if [ "$MODE" = "manual" ] || { [ "$MODE" = "auto" ] && as_on status_indicator; }; then
     want="description=${new} ${base}"
     have=$(grep -m1 '^description=' "$PROP")
 

@@ -253,10 +253,12 @@
   var snI=dkInput("status notification");
   if(snI) snI.addEventListener("change",function(e){
     settingOn("status_notify",e.target.checked);
-    // hourly is enough (and Action): no forced fetch here, which would re-stamp
-    // the module.prop prefix when the indicator is off. The next check posts it.
-    toast(e.target.checked?tr("notif_on","Status notifications on · shows on each check")
-                          :tr("notif_off","Status notifications off"), 2600);
+    if(e.target.checked){
+      toast(tr("notif_on","Status notification on"),2600);
+      // fire one right away via the dedicated notify mode: it posts without
+      // re-stamping the module.prop prefix (works even with the indicator off)
+      deferBg('sh "'+MOD+'/status_fetch.sh" notify');
+    } else toast(tr("notif_off","Status notification off"),2000);
   });
   // Keybox
   var ckSwEl=document.getElementById("ckSw");
