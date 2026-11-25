@@ -73,4 +73,10 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 Then drop the new zip in `vendor/` (build.sh auto-picks the newest
 `TEESimulator-RS-*-Release.zip`) and remove the old one.
 
+### Local Android 17 Keystore2 patch (`teesimulator-rs-android17-keystore2.patch`)
+
+Applied on top of `TEESimulator-RS-v6.1.0-319-Release.zip` (`classes.dex` updated inside the archive):
+- `Keystore2Interceptor.kt`: stop rewriting real `keystore2` `EX_SERVICE_SPECIFIC` replies via `normalizeServiceSpecificReply()` in `onPostTransact`, and skip rebuilding `getNumberOfEntries` replies when `softwareCount == 0`.
+- `InterceptorUtils.kt`: align `synthesizeSseMessage(7)` with Android 17 `keystore2`'s Rust error format (`Error::Rc(r#KEY_NOT_FOUND)`) and map `6` to `Error::Rc(r#PERMISSION_DENIED)`.
+
 **Not flash-tested on a STRONG-capable device.** Build + source review only.
