@@ -1,0 +1,32 @@
+--- a/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/KeyMintSecurityLevelInterceptor.kt
++++ b/app/src/main/java/org/matrix/TEESimulator/interception/keystore/shim/KeyMintSecurityLevelInterceptor.kt
+@@ -540,6 +540,12 @@ class KeyMintSecurityLevelInterceptor(
+         val hasOversizedChallenge = parcel.dataSize() > MAX_ALIAS_LENGTH
+         try {
+             parcel.enforceInterface("android.system.keystore2.IKeystoreSecurityLevel")
++            if (
++                securityLevel == 2 &&
++                !Config.needSkip(callingUid) &&
++                !KeyboxManager.hasStrongBoxCert(callingUid)
++            ) {
++                return InterceptorUtils.createErrorReply(HARDWARE_TYPE_UNAVAILABLE) // -68
++            }
+             val key = parcel.readTypedObject(KeyDescriptor.CREATOR)!!
+             val attestKey = parcel.readTypedObject(KeyDescriptor.CREATOR)
+--- a/app/src/main/java/org/matrix/TEESimulator/pki/KeyboxManager.kt
++++ b/app/src/main/java/org/matrix/TEESimulator/pki/KeyboxManager.kt
+@@ -60,4 +60,15 @@ object KeyboxManager {
+         return map[alg]
+     }
++
++    fun hasStrongBoxCert(uid: Int): Boolean {
++        val file = Config.getKeyboxFileForUid(uid)
++        for (entry in loadKeyboxes(file).values) {
++            for (cert in entry.certificates) {
++                val dn = (cert as? X509Certificate)?.subjectX500Principal?.name ?: continue
++                if (dn.uppercase(Locale.ROOT).contains("STRONGBOX")) return true
++            }
++        }
++        return false
++    }
+ }

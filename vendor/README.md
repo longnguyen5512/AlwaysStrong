@@ -79,4 +79,9 @@ Applied on top of `TEESimulator-RS-v6.1.0-319-Release.zip` (`classes.dex` update
 - `Keystore2Interceptor.kt`: stop rewriting real `keystore2` `EX_SERVICE_SPECIFIC` replies via `normalizeServiceSpecificReply()` in `onPostTransact`, and skip rebuilding `getNumberOfEntries` replies when `softwareCount == 0`.
 - `InterceptorUtils.kt`: align `synthesizeSseMessage(7)` with Android 17 `keystore2`'s Rust error format (`Error::Rc(r#KEY_NOT_FOUND)`) and map `6` to `Error::Rc(r#PERMISSION_DENIED)`.
 
+### StrongBox keybox guard (`teesimulator-rs-strongbox-keybox-guard.patch`)
+
+Applied on top of `TEESimulator-RS-v6.1.0-319-Release.zip` (`classes.dex` updated inside the archive):
+- `KeyMintSecurityLevelInterceptor.kt`: on `securityLevel == 2` (`STRONGBOX`), if the active keybox for `callingUid` contains no X.509 certificate whose Subject DN contains `STRONGBOX`, return `HARDWARE_TYPE_UNAVAILABLE` (`-68`) so StrongBox callers fall back cleanly instead of serving a TEE/RKP-only chain under `SecurityLevel.STRONGBOX`.
+
 **Not flash-tested on a STRONG-capable device.** Build + source review only.
